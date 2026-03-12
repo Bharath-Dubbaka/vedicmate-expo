@@ -1,5 +1,5 @@
 // app/(tabs)/matches.jsx
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import {
    View,
    Text,
@@ -10,12 +10,14 @@ import {
    RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useAuthStore } from "../../store/authStore";
+import { useDispatch, useSelector } from "react-redux";
+import {
+   fetchMatches,
+   selectMatches,
+   selectMatchesLoading,
+   selectTotalUnread,
+} from "../../store/slices/matchesSlice";
 import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
-
-// Shared in-memory match store — discover.jsx writes to this, matches.jsx reads it
-// Import this from a shared location in real app; for now module-level works across tabs
-export const DEV_MATCH_STORE = { matches: [] };
 
 const formatTime = (date) => {
    if (!date) return "";
@@ -28,71 +30,39 @@ const formatTime = (date) => {
 
 const VERDICT_COLORS = {
    "Excellent Match": "#C9A84C",
-   "Great Match": "#4CAF50",
-   "Good Match": "#7B8CDE",
-   "Average Match": "#FF9800",
+   "Good Match": "#4CAF50",
+   "Average Match": "#7B8CDE",
+   "Challenging Match": "#FF9800",
 };
 
 export default function MatchesScreen() {
    const router = useRouter();
-   const { token } = useAuthStore();
-   const [matches, setMatches] = useState([]);
-   const [loading, setLoading] = useState(true);
-   const [refreshing, setRefreshing] = useState(false);
-
-   const isDev = !token || token.startsWith("dev_token");
-
-   const fetchMatches = useCallback(async () => {
-      try {
-         if (isDev) {
-            // Only show matches the user actually liked (written by discover.jsx)
-            setMatches([...DEV_MATCH_STORE.matches]);
-            return;
-         }
-         const { matchingAPI } = await import("../../services/api");
-         const res = await matchingAPI.getMatches();
-         setMatches(res.data.matches);
-      } catch (err) {
-         console.log("Matches error:", err.message);
-         setMatches([...DEV_MATCH_STORE.matches]);
-      } finally {
-         setLoading(false);
-         setRefreshing(false);
-      }
-   }, []);
-
-   // Refresh every time tab is focused
-   useEffect(() => {
-      const interval = setInterval(() => {
-         setMatches([...DEV_MATCH_STORE.matches]);
-      }, 1000);
-      return () => clearInterval(interval);
-   }, []);
+   const dispatch = useDispatch();
+   const matches = useSelector(selectMatches);
+   const loading = useSelector(selectMatchesLoading);
 
    useEffect(() => {
-      fetchMatches();
+      console.log("[MATCHES] Tab focused — fetching matches...");
+      dispatch(fetchMatches());
    }, []);
+
+   const onRefresh = useCallback(() => {
+      dispatch(fetchMatches());
+   }, [dispatch]);
 
    const renderMatch = ({ item }) => {
       const color = VERDICT_COLORS[item.compatibility?.verdict] || COLORS.gold;
-      const hasUnread = item.unreadCount > 0;
+      const hasUnread = (item.unreadCount || 0) > 0;
+
       return (
          <TouchableOpacity
             style={styles.matchRow}
             onPress={() => router.push(`/(tabs)/chat/${item.matchId}`)}
             activeOpacity={0.75}
          >
+            {/* Avatar with Guna score badge */}
             <View style={styles.avatarWrap}>
-               <View
-                  style={[
-                     styles.avatar,
-                     {
-                        backgroundColor: COLORS.bgElevated,
-                        alignItems: "center",
-                        justifyContent: "center",
-                     },
-                  ]}
-               >
+               <View style={styles.avatar}>
                   <Text style={{ fontSize: 28 }}>
                      {item.user?.cosmicCard?.nakshatra?.split(" ")[0] || "🌟"}
                   </Text>
@@ -103,6 +73,8 @@ export default function MatchesScreen() {
                   </Text>
                </View>
             </View>
+
+            {/* Match info */}
             <View style={styles.matchInfo}>
                <View style={styles.matchHeader}>
                   <Text style={styles.matchName}>{item.user?.name}</Text>
@@ -110,8 +82,15 @@ export default function MatchesScreen() {
                      {formatTime(item.matchedAt)}
                   </Text>
                </View>
+
+               <Text style={styles.nakshatra}>
+                  {item.user?.cosmicCard?.nakshatra}
+               </Text>
+
                <View style={styles.matchFooter}>
-                  <Text style={styles.newMatch}>✨ New match! Say hello</Text>
+                  <Text style={[styles.verdict, { color }]}>
+                     {item.compatibility?.verdict}
+                  </Text>
                   {hasUnread && (
                      <View style={styles.unreadBadge}>
                         <Text style={styles.unreadText}>
@@ -120,11 +99,6 @@ export default function MatchesScreen() {
                      </View>
                   )}
                </View>
-               <Text style={styles.nakshatraRow}>
-                  {item.user?.cosmicCard?.nakshatra}
-                  {"  ·  "}
-                  {item.compatibility?.verdict}
-               </Text>
             </View>
          </TouchableOpacity>
       );
@@ -136,7 +110,8 @@ export default function MatchesScreen() {
             <Text style={styles.headerTitle}>MATCHES</Text>
             <Text style={styles.headerCount}>{matches.length}</Text>
          </View>
-         {loading ? (
+
+         {loading && matches.length === 0 ? (
             <View style={styles.loading}>
                <ActivityIndicator color={COLORS.gold} />
             </View>
@@ -149,11 +124,8 @@ export default function MatchesScreen() {
                ItemSeparatorComponent={() => <View style={styles.separator} />}
                refreshControl={
                   <RefreshControl
-                     refreshing={refreshing}
-                     onRefresh={() => {
-                        setRefreshing(true);
-                        fetchMatches();
-                     }}
+                     refreshing={loading}
+                     onRefresh={onRefresh}
                      tintColor={COLORS.gold}
                   />
                }
@@ -177,12 +149,12 @@ const styles = StyleSheet.create({
    header: {
       flexDirection: "row",
       alignItems: "center",
-      gap: SPACING.sm,
       paddingHorizontal: SPACING.xl,
       paddingTop: 56,
       paddingBottom: SPACING.md,
       borderBottomWidth: 1,
       borderBottomColor: COLORS.border,
+      gap: SPACING.sm,
    },
    headerTitle: {
       fontFamily: FONTS.headingBold,
@@ -205,7 +177,14 @@ const styles = StyleSheet.create({
       padding: SPACING.sm,
    },
    avatarWrap: { position: "relative" },
-   avatar: { width: 62, height: 62, borderRadius: 31 },
+   avatar: {
+      width: 62,
+      height: 62,
+      borderRadius: 31,
+      backgroundColor: COLORS.bgElevated,
+      alignItems: "center",
+      justifyContent: "center",
+   },
    scoreDot: {
       position: "absolute",
       bottom: -4,
@@ -222,7 +201,6 @@ const styles = StyleSheet.create({
    matchInfo: { flex: 1 },
    matchHeader: {
       flexDirection: "row",
-      alignItems: "center",
       justifyContent: "space-between",
       marginBottom: 2,
    },
@@ -232,13 +210,18 @@ const styles = StyleSheet.create({
       color: COLORS.textPrimary,
    },
    matchTime: { fontFamily: FONTS.body, fontSize: 12, color: COLORS.textDim },
+   nakshatra: {
+      fontFamily: FONTS.body,
+      fontSize: 12,
+      color: COLORS.textSecondary,
+      marginBottom: 2,
+   },
    matchFooter: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 2,
    },
-   newMatch: { fontFamily: FONTS.bodyMedium, fontSize: 13, color: COLORS.gold },
+   verdict: { fontFamily: FONTS.bodyMedium, fontSize: 12 },
    unreadBadge: {
       backgroundColor: COLORS.gold,
       borderRadius: 10,
@@ -249,12 +232,11 @@ const styles = StyleSheet.create({
       paddingHorizontal: 5,
    },
    unreadText: { fontFamily: FONTS.bodyBold, fontSize: 11, color: COLORS.bg },
-   nakshatraRow: {
-      fontFamily: FONTS.body,
-      fontSize: 12,
-      color: COLORS.textDim,
+   separator: {
+      height: 1,
+      backgroundColor: COLORS.border,
+      marginLeft: 78,
    },
-   separator: { height: 1, backgroundColor: COLORS.border, marginLeft: 78 },
    empty: { flex: 1, alignItems: "center", paddingTop: 100 },
    emptyEmoji: { fontSize: 56, marginBottom: SPACING.md },
    emptyTitle: {

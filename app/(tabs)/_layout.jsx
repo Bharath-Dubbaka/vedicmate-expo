@@ -1,4 +1,4 @@
-//
+// app/(tabs)/_layout.jsx
 
 import { Tabs } from "expo-router";
 import { Text } from "react-native";

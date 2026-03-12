@@ -1,4 +1,15 @@
 // app/(tabs)/chat/[matchId].jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// CHAT SCREEN — Real-time messaging via Socket.io
+//
+// React.js vs React Native:
+//   - FlatList (RN) vs <ul>/<div scroll> (React.js)
+//     FlatList is VIRTUALIZED — only renders visible items (huge performance win)
+//     React.js: you'd use react-virtual or similar for large lists
+//   - Keyboard handling: KeyboardAvoidingView pushes content up
+//   - No CSS :focus — use onFocus/onBlur props on TextInput
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { useEffect, useRef, useState } from "react";
 import {
    View,
@@ -12,190 +23,185 @@ import {
    ActivityIndicator,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useAuthStore } from "../../../store/authStore";
+import { useDispatch, useSelector } from "react-redux";
+import {
+   fetchMessages,
+   addMessage,
+   selectMessages,
+   selectChatLoading,
+} from "../../../store/slices/chatSlice";
+import { clearUnread } from "../../../store/slices/matchesSlice";
+import { selectUser } from "../../../store/slices/authSlice";
+import {
+   connectSocket,
+   sendSocketMessage,
+   emitTypingStart,
+   emitTypingStop,
+} from "../../../services/socket";
 import { COLORS, FONTS, SPACING, RADIUS } from "../../../constants/theme";
 
-// Per-match mock message store (lives in module scope for this session)
-const MOCK_MSG_STORE = {};
-
-const MOCK_MATCHES = {
-   m1: {
-      name: "Priya",
-      nakshatra: "🌸 Rohini",
-      gunaScore: 28,
-      verdict: "Great Match",
-   },
-   m2: {
-      name: "Kavitha",
-      nakshatra: "⭐ Pushya",
-      gunaScore: 32,
-      verdict: "Excellent Match",
-   },
-   m3: {
-      name: "Ananya",
-      nakshatra: "🌙 Hasta",
-      gunaScore: 22,
-      verdict: "Good Match",
-   },
-   m4: {
-      name: "Meera",
-      nakshatra: "🔥 Magha",
-      gunaScore: 18,
-      verdict: "Average Match",
-   },
-   m5: {
-      name: "Divya",
-      nakshatra: "💫 Chitra",
-      gunaScore: 30,
-      verdict: "Great Match",
-   },
-};
-
-const AUTO_REPLIES = [
-   "Namaste! 🙏 I'm so glad the stars brought us together.",
-   "Your Nakshatra energy is so compatible with mine! ✨",
-   "I was hoping someone with this Guna score would find me 😊",
-   "Tell me more about yourself! What do you do?",
-   "The cosmic alignment feels right 🔮",
-];
-
 export default function ChatScreen() {
+   // useLocalSearchParams = access URL params
+   // In Expo Router: file name [matchId].jsx → param name is "matchId"
+   // React.js (React Router): useParams()
    const { matchId } = useLocalSearchParams();
    const router = useRouter();
-   const { user, token } = useAuthStore();
+   const dispatch = useDispatch();
 
-   const isDev = !token || token.startsWith("dev_token");
+   const currentUser = useSelector(selectUser);
+   const messages = useSelector(selectMessages(matchId));
+   const chatLoading = useSelector(selectChatLoading(matchId));
 
-   // Per-match message state — keyed by matchId
-   const [messages, setMessages] = useState([]);
    const [inputText, setInputText] = useState("");
-   const [loading, setLoading] = useState(true);
    const [theirTyping, setTheirTyping] = useState(false);
    const [matchInfo, setMatchInfo] = useState(null);
 
+   // Use the matches from Redux to get match info
+   const matches = useSelector((state) => state.matches.matches);
+
    const flatListRef = useRef(null);
+   const typingTimeout = useRef(null);
+   const socketRef = useRef(null);
    const tempIdCounter = useRef(0);
-   const replyTimer = useRef(null);
 
    useEffect(() => {
-      // Reset state when matchId changes — fixes shared-messages bug
-      setMessages([]);
-      setInputText("");
-      setLoading(true);
-      setTheirTyping(false);
+      console.log(`[CHAT] Mounted for matchId: ${matchId}`);
 
-      if (isDev) {
-         loadDevChat();
-      } else {
-         loadRealChat();
+      // Get match info from matches slice
+      const match = matches.find(
+         (m) => m.matchId.toString() === matchId.toString(),
+      );
+      if (match) {
+         setMatchInfo({
+            name: match.user?.name,
+            nakshatra: match.user?.cosmicCard?.nakshatra,
+            gunaScore: match.compatibility?.gunaScore,
+            verdict: match.compatibility?.verdict,
+         });
       }
 
+      // Clear unread count for this match
+      dispatch(clearUnread(matchId));
+
+      // Fetch message history from API
+      dispatch(fetchMessages(matchId));
+
+      // Connect Socket.io for real-time messaging
+      setupSocket();
+
       return () => {
-         if (replyTimer.current) clearTimeout(replyTimer.current);
+         console.log(`[CHAT] Cleanup for matchId: ${matchId}`);
+         clearTimeout(typingTimeout.current);
       };
-   }, [matchId]); // Re-runs when matchId changes
+   }, [matchId]);
 
-   const loadDevChat = () => {
-      const info = MOCK_MATCHES[matchId] || {
-         name: "Match",
-         nakshatra: "🌟",
-         gunaScore: 0,
-         verdict: "",
-      };
-      setMatchInfo(info);
-      // Load persisted mock messages for this specific matchId
-      const stored = MOCK_MSG_STORE[matchId] || [];
-      setMessages(stored);
-      setLoading(false);
-   };
-
-   const loadRealChat = async () => {
+   const setupSocket = async () => {
       try {
-         const { chatAPI, matchingAPI } = await import("../../../services/api");
-         const [msgRes, matchRes] = await Promise.all([
-            chatAPI.getMessages(matchId, { limit: 40 }),
-            matchingAPI.getMatches(),
-         ]);
-         setMessages(msgRes.data.messages);
-         const match = matchRes.data.matches.find(
-            (m) => m.matchId.toString() === matchId,
-         );
-         if (match)
-            setMatchInfo({
-               name: match.user.name,
-               nakshatra: match.user.cosmicCard?.nakshatra,
-               gunaScore: match.compatibility.gunaScore,
-               verdict: match.compatibility.verdict,
-            });
+         console.log("[CHAT] Connecting Socket.io...");
+         const socket = await connectSocket();
+         socketRef.current = socket;
+
+         if (!socket) {
+            console.log(
+               "[CHAT] Socket connection failed — using REST API only",
+            );
+            return;
+         }
+
+         // Join this match's room to receive messages
+         socket.emit("join:matches", [matchId]);
+         console.log(`[CHAT] Joined socket room: match:${matchId}`);
+
+         // Listen for incoming messages
+         socket.on("message:new", (msg) => {
+            console.log(
+               `[CHAT] Socket received message:new for matchId: ${msg.matchId}`,
+            );
+            if (msg.matchId.toString() === matchId.toString()) {
+               dispatch(addMessage({ matchId, message: msg }));
+               scrollToBottom();
+            }
+         });
+
+         // Listen for typing indicators
+         socket.on("typing:start", ({ matchId: mid }) => {
+            if (mid.toString() === matchId.toString()) {
+               setTheirTyping(true);
+            }
+         });
+         socket.on("typing:stop", ({ matchId: mid }) => {
+            if (mid.toString() === matchId.toString()) {
+               setTheirTyping(false);
+            }
+         });
       } catch (err) {
-         console.error("Chat load error:", err.message);
-         // Fall back to dev mode
-         loadDevChat();
-      } finally {
-         setLoading(false);
+         console.error("[CHAT] Socket setup error:", err.message);
       }
    };
 
    const scrollToBottom = () => {
-      setTimeout(
-         () => flatListRef.current?.scrollToEnd({ animated: true }),
-         100,
-      );
+      setTimeout(() => {
+         flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+   };
+
+   const handleTyping = (text) => {
+      setInputText(text);
+
+      // Emit typing:start
+      if (text.length > 0) {
+         emitTypingStart(matchId);
+         // Clear previous timeout and set new one to stop typing
+         clearTimeout(typingTimeout.current);
+         typingTimeout.current = setTimeout(() => {
+            emitTypingStop(matchId);
+         }, 2000);
+      } else {
+         emitTypingStop(matchId);
+      }
    };
 
    const handleSend = () => {
       const text = inputText.trim();
       if (!text) return;
 
-      const newMsg = {
-         _id: `temp_${matchId}_${++tempIdCounter.current}`,
+      // Create optimistic message (show immediately before server confirms)
+      const tempId = `temp_${matchId}_${++tempIdCounter.current}`;
+      const optimisticMsg = {
+         _id: tempId,
          text,
-         sender: { _id: user?.id || "dev_user_001" },
+         sender: { _id: currentUser?.id },
          createdAt: new Date().toISOString(),
-         pending: false,
+         pending: true, // we can show a sending indicator with this flag
       };
 
-      const updated = [...(MOCK_MSG_STORE[matchId] || []), newMsg];
-      MOCK_MSG_STORE[matchId] = updated;
-      setMessages(updated);
+      // Add to Redux immediately
+      dispatch(addMessage({ matchId, message: optimisticMsg }));
       setInputText("");
+      emitTypingStop(matchId);
       scrollToBottom();
 
-      if (isDev) {
-         // Simulate reply after delay
-         setTheirTyping(true);
-         replyTimer.current = setTimeout(
-            () => {
-               const reply = {
-                  _id: `reply_${matchId}_${Date.now()}`,
-                  text: AUTO_REPLIES[
-                     Math.floor(Math.random() * AUTO_REPLIES.length)
-                  ],
-                  sender: { _id: `other_${matchId}` },
-                  createdAt: new Date().toISOString(),
-               };
-               const withReply = [...(MOCK_MSG_STORE[matchId] || []), reply];
-               MOCK_MSG_STORE[matchId] = withReply;
-               setMessages(withReply);
-               setTheirTyping(false);
-               scrollToBottom();
-            },
-            1500 + Math.random() * 1000,
-         );
-      } else {
-         // Real socket send
-         import("../../../services/socket").then(({ sendSocketMessage }) => {
-            sendSocketMessage(matchId, text, newMsg._id, () => {});
-         });
-      }
+      // Send via Socket.io
+      console.log(`[CHAT] Sending message: "${text.substring(0, 30)}..."`);
+      sendSocketMessage(matchId, text, tempId, (ack) => {
+         if (ack?.error) {
+            console.error("[CHAT] Message send error:", ack.error);
+         } else {
+            console.log(
+               `[CHAT] Message delivered, messageId: ${ack?.messageId}`,
+            );
+         }
+      });
    };
 
-   const isMe = (msg) =>
-      (msg.sender?._id || msg.sender)?.toString() ===
-      (user?.id || "dev_user_001").toString();
+   const isMyMessage = (msg) => {
+      const senderId = (msg.sender?._id || msg.sender)?.toString();
+      const myId = currentUser?.id?.toString();
+      return senderId === myId;
+   };
 
-   const renderMessage = ({ item, index }) => {
-      const mine = isMe(item);
+   const renderMessage = ({ item }) => {
+      const mine = isMyMessage(item);
       return (
          <View
             style={[
@@ -225,6 +231,7 @@ export default function ChatScreen() {
                      minute: "2-digit",
                      hour12: true,
                   })}
+                  {item.pending ? " ⏳" : ""}
                </Text>
             </View>
          </View>
@@ -237,6 +244,7 @@ export default function ChatScreen() {
          behavior={Platform.OS === "ios" ? "padding" : "height"}
          keyboardVerticalOffset={0}
       >
+         {/* Header */}
          <View style={styles.header}>
             <TouchableOpacity
                onPress={() => router.back()}
@@ -254,12 +262,13 @@ export default function ChatScreen() {
                   </Text>
                )}
             </View>
-            <View style={styles.kundliBtn}>
+            <TouchableOpacity style={styles.kundliBtn}>
                <Text style={styles.kundliBtnText}>🔮</Text>
-            </View>
+            </TouchableOpacity>
          </View>
 
-         {loading ? (
+         {/* Messages */}
+         {chatLoading ? (
             <View style={styles.loading}>
                <ActivityIndicator color={COLORS.gold} />
             </View>
@@ -271,6 +280,7 @@ export default function ChatScreen() {
                renderItem={renderMessage}
                contentContainerStyle={styles.messageList}
                onContentSizeChange={scrollToBottom}
+               showsVerticalScrollIndicator={false}
                ListHeaderComponent={
                   matchInfo && (
                      <View style={styles.matchBanner}>
@@ -288,7 +298,10 @@ export default function ChatScreen() {
                   <View style={styles.emptyChat}>
                      <Text style={styles.emptyChatEmoji}>💬</Text>
                      <Text style={styles.emptyChatText}>
-                        Say hello to {matchInfo?.name}!
+                        Say hello to {matchInfo?.name || "your match"}!
+                     </Text>
+                     <Text style={styles.emptyChatSub}>
+                        You're cosmically connected. Break the ice ✨
                      </Text>
                   </View>
                }
@@ -304,15 +317,17 @@ export default function ChatScreen() {
             />
          )}
 
+         {/* Input bar */}
          <View style={styles.inputBar}>
             <TextInput
                style={styles.input}
                placeholder="Type a message..."
                placeholderTextColor={COLORS.textDim}
                value={inputText}
-               onChangeText={setInputText}
+               onChangeText={handleTyping}
                multiline
                maxLength={1000}
+               returnKeyType="default"
             />
             <TouchableOpacity
                style={[
@@ -365,8 +380,7 @@ const styles = StyleSheet.create({
    matchBanner: {
       alignItems: "center",
       marginBottom: SPACING.xl,
-      paddingVertical: SPACING.md,
-      paddingHorizontal: SPACING.lg,
+      padding: SPACING.md,
       backgroundColor: COLORS.bgElevated,
       borderRadius: RADIUS.lg,
       borderWidth: 1,
@@ -391,8 +405,14 @@ const styles = StyleSheet.create({
    },
    emptyChatEmoji: { fontSize: 48, marginBottom: SPACING.md },
    emptyChatText: {
+      fontFamily: FONTS.bodyBold,
+      fontSize: 18,
+      color: COLORS.textPrimary,
+      marginBottom: SPACING.xs,
+   },
+   emptyChatSub: {
       fontFamily: FONTS.body,
-      fontSize: 16,
+      fontSize: 13,
       color: COLORS.textSecondary,
    },
    msgRow: {

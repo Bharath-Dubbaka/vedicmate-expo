@@ -1,5 +1,14 @@
 // app/(tabs)/discover.jsx
-import { useEffect, useRef, useState, useCallback } from "react";
+// ─────────────────────────────────────────────────────────────────────────────
+// DISCOVER SCREEN — Tinder-style swipe with live Guna scores
+//
+// Key React Native concepts here:
+//   PanResponder = touch gesture handler (like mouse events in React.js, but for touch)
+//   Animated.event = maps gesture values directly to Animated.Value
+//   GestureHandler pattern: onStartShouldSetPanResponder → onPanResponderMove → onPanResponderRelease
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useEffect, useRef, useCallback } from "react";
 import {
    View,
    Text,
@@ -11,151 +20,55 @@ import {
    ActivityIndicator,
    Alert,
 } from "react-native";
-import { useAuthStore } from "../../store/authStore";
-import { DEV_MATCH_STORE } from "./matches";
+import { useDispatch, useSelector } from "react-redux";
+import {
+   fetchProfiles,
+   likeProfile,
+   passProfile,
+   removeProfile,
+   selectProfiles,
+   selectDiscoverLoading,
+   selectIsEmpty,
+} from "../../store/slices/discoverSlice";
+import { addMatch } from "../../store/slices/matchesSlice";
 import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width - SPACING.xl * 2;
 const CARD_HEIGHT = height * 0.62;
-const SWIPE_THRESHOLD = width * 0.35;
+const SWIPE_THRESHOLD = width * 0.35; // 35% of screen width = swipe commits
 
-// ── Mock profiles for dev mode ─────────────────────────────
-const MOCK_PROFILES = [
-   {
-      user: {
-         id: "u1",
-         name: "Priya",
-         age: 26,
-         photos: [],
-         cosmicCard: {
-            nakshatra: "🌸 Rohini",
-            gana: "Manushya",
-            animal: "Serpent",
-            rashi: "Taurus",
-         },
-      },
-      compatibility: {
-         totalScore: 28,
-         verdict: "Great Match",
-         hasDoshas: false,
-         highlights: [
-            { name: "Nadi", score: 8, max: 8 },
-            { name: "Bhakoot", score: 7, max: 7 },
-         ],
-      },
-   },
-   {
-      user: {
-         id: "u2",
-         name: "Kavitha",
-         age: 24,
-         photos: [],
-         cosmicCard: {
-            nakshatra: "⭐ Pushya",
-            gana: "Deva",
-            animal: "Goat",
-            rashi: "Cancer",
-         },
-      },
-      compatibility: {
-         totalScore: 32,
-         verdict: "Excellent Match",
-         hasDoshas: false,
-         highlights: [
-            { name: "Gana", score: 6, max: 6 },
-            { name: "Graha Maitri", score: 5, max: 5 },
-         ],
-      },
-   },
-   {
-      user: {
-         id: "u3",
-         name: "Ananya",
-         age: 27,
-         photos: [],
-         cosmicCard: {
-            nakshatra: "🌙 Hasta",
-            gana: "Deva",
-            animal: "Buffalo",
-            rashi: "Virgo",
-         },
-      },
-      compatibility: {
-         totalScore: 22,
-         verdict: "Good Match",
-         hasDoshas: true,
-         highlights: [
-            { name: "Varna", score: 1, max: 1 },
-            { name: "Vasya", score: 2, max: 2 },
-         ],
-      },
-   },
-   {
-      user: {
-         id: "u4",
-         name: "Meera",
-         age: 25,
-         photos: [],
-         cosmicCard: {
-            nakshatra: "🔥 Magha",
-            gana: "Rakshasa",
-            animal: "Rat",
-            rashi: "Leo",
-         },
-      },
-      compatibility: {
-         totalScore: 18,
-         verdict: "Average Match",
-         hasDoshas: false,
-         highlights: [{ name: "Tara", score: 3, max: 3 }],
-      },
-   },
-   {
-      user: {
-         id: "u5",
-         name: "Divya",
-         age: 23,
-         photos: [],
-         cosmicCard: {
-            nakshatra: "💫 Chitra",
-            gana: "Manushya",
-            animal: "Tiger",
-            rashi: "Libra",
-         },
-      },
-      compatibility: {
-         totalScore: 30,
-         verdict: "Great Match",
-         hasDoshas: false,
-         highlights: [
-            { name: "Nadi", score: 8, max: 8 },
-            { name: "Gana", score: 6, max: 6 },
-         ],
-      },
-   },
-];
-
+// ── Verdict color config ───────────────────────────────────────────────────────
 const VERDICT_COLORS = {
-   "Excellent Match": { color: "#C9A84C", emoji: "🌟" },
-   "Great Match": { color: "#4CAF50", emoji: "💚" },
-   "Good Match": { color: "#7B8CDE", emoji: "💙" },
-   "Average Match": { color: "#FF9800", emoji: "🤝" },
-};
-const GANA_COLORS = {
-   Deva: { color: "#C9A84C", bg: "rgba(201,168,76,0.2)" },
-   Manushya: { color: "#7B8CDE", bg: "rgba(123,140,222,0.2)" },
-   Rakshasa: { color: "#E05C5C", bg: "rgba(224,92,92,0.2)" },
+   "Excellent Match": { color: "#C9A84C", emoji: "🌟", barColor: "#C9A84C" },
+   "Good Match": { color: "#4CAF50", emoji: "💚", barColor: "#4CAF50" },
+   "Average Match": { color: "#7B8CDE", emoji: "💙", barColor: "#7B8CDE" },
+   "Challenging Match": { color: "#FF9800", emoji: "⚠️", barColor: "#FF9800" },
 };
 
-// ── Swipe Card ─────────────────────────────────────────────
+const GANA_COLORS = {
+   Deva: { color: "#A78BFA", bg: "rgba(167,139,250,0.2)" },
+   Manushya: { color: "#60A5FA", bg: "rgba(96,165,250,0.2)" },
+   Rakshasa: { color: "#F87171", bg: "rgba(248,113,113,0.2)" },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SWIPE CARD COMPONENT
+// Each profile card is its own component with its own PanResponder
+// ─────────────────────────────────────────────────────────────────────────────
 function SwipeCard({ profile, onLike, onPass, isTop }) {
+   // Each card has its own pan position (x/y offset from drag)
    const pan = useRef(new Animated.ValueXY()).current;
 
+   // Interpolations derive animated values from another animated value
+   // This is like CSS calc() but reactive
    const rotate = pan.x.interpolate({
       inputRange: [-width / 2, 0, width / 2],
-      outputRange: ["-12deg", "0deg", "12deg"],
+      outputRange: ["-10deg", "0deg", "10deg"],
+      extrapolate: "clamp", // don't go beyond the range
    });
+
+   // Show LIKE/PASS labels when swiping
    const likeOpacity = pan.x.interpolate({
       inputRange: [0, 80],
       outputRange: [0, 1],
@@ -167,24 +80,41 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
       extrapolate: "clamp",
    });
 
+   // ── PanResponder ──────────────────────────────────────────────────────────
+   // Think of this as event listeners for touch gestures
    const panResponder = useRef(
       PanResponder.create({
-         onStartShouldSetPanResponder: () => isTop,
-         onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
-            useNativeDriver: false,
-         }),
+         // Should this responder handle the gesture?
+         onStartShouldSetPanResponder: () => isTop, // only top card responds
+
+         // As finger moves: update pan position
+         onPanResponderMove: Animated.event(
+            [null, { dx: pan.x, dy: pan.y }], // map gesture delta to pan.x, pan.y
+            { useNativeDriver: false }, // can't use native driver for ValueXY moves
+         ),
+
+         // When finger lifts: decide what to do
          onPanResponderRelease: (_, gesture) => {
             if (gesture.dx > SWIPE_THRESHOLD) {
+               // Swiped right → LIKE
+               console.log(
+                  `[SWIPE CARD] Swiping RIGHT (like) for: ${profile.user.name}`,
+               );
                Animated.spring(pan, {
                   toValue: { x: width * 1.5, y: gesture.dy },
                   useNativeDriver: false,
                }).start(() => onLike(profile));
             } else if (gesture.dx < -SWIPE_THRESHOLD) {
+               // Swiped left → PASS
+               console.log(
+                  `[SWIPE CARD] Swiping LEFT (pass) for: ${profile.user.name}`,
+               );
                Animated.spring(pan, {
                   toValue: { x: -width * 1.5, y: gesture.dy },
                   useNativeDriver: false,
                }).start(() => onPass(profile));
             } else {
+               // Didn't swipe far enough → snap back
                Animated.spring(pan, {
                   toValue: { x: 0, y: 0 },
                   friction: 5,
@@ -197,7 +127,7 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
 
    const vc =
       VERDICT_COLORS[profile.compatibility.verdict] ||
-      VERDICT_COLORS["Good Match"];
+      VERDICT_COLORS["Average Match"];
    const gc = GANA_COLORS[profile.user.cosmicCard.gana] || GANA_COLORS.Manushya;
 
    return (
@@ -214,26 +144,21 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
             },
          ]}
          {...(isTop ? panResponder.panHandlers : {})}
+         // panHandlers spreads: onStartShouldSetResponder, onResponderMove, etc.
+         // This is how PanResponder attaches to a View
       >
-         {/* Photo placeholder */}
-         <View
-            style={[
-               styles.cardPhoto,
-               {
-                  backgroundColor: gc.bg,
-                  alignItems: "center",
-                  justifyContent: "center",
-               },
-            ]}
-         >
-            <Text style={{ fontSize: 90 }}>👤</Text>
-            <Text style={{ fontSize: 32, marginTop: 8 }}>
-               {profile.user.cosmicCard.nakshatra.split(" ")[0]}
+         {/* Photo area — shows emoji placeholder until photo upload is built */}
+         <View style={[styles.cardPhoto, { backgroundColor: gc.bg }]}>
+            <Text style={styles.photoPlaceholder}>👤</Text>
+            <Text style={styles.photoNakshatraEmoji}>
+               {profile.user.cosmicCard.nakshatra?.split(" ")[0] || "🌟"}
             </Text>
          </View>
 
+         {/* Dark gradient overlay at bottom of card */}
          <View style={styles.cardOverlay} />
 
+         {/* LIKE / PASS labels (animated opacity) */}
          {isTop && (
             <>
                <Animated.View
@@ -243,7 +168,9 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
                      { opacity: likeOpacity },
                   ]}
                >
-                  <Text style={styles.swipeLabelText}>LIKE ✨</Text>
+                  <Text style={[styles.swipeLabelText, { color: "#4CAF50" }]}>
+                     LIKE ✨
+                  </Text>
                </Animated.View>
                <Animated.View
                   style={[
@@ -252,22 +179,38 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
                      { opacity: passOpacity },
                   ]}
                >
-                  <Text style={styles.swipeLabelText}>PASS</Text>
+                  <Text style={[styles.swipeLabelText, { color: "#E05C5C" }]}>
+                     PASS
+                  </Text>
                </Animated.View>
             </>
          )}
 
+         {/* Card info overlay */}
          <View style={styles.cardInfo}>
+            {/* Guna score badge */}
             <View style={[styles.scoreBadge, { borderColor: vc.color }]}>
                <Text style={styles.scoreBadgeEmoji}>{vc.emoji}</Text>
                <Text style={[styles.scoreBadgeText, { color: vc.color }]}>
                   {profile.compatibility.totalScore}/36
                </Text>
+               <Text style={[styles.scoreBadgeVerdict, { color: vc.color }]}>
+                  {profile.compatibility.verdict}
+               </Text>
             </View>
+
+            {/* Name & age */}
             <Text style={styles.cardName}>
                {profile.user.name}, {profile.user.age}
             </Text>
-            <View style={[styles.cosmicRow, { backgroundColor: gc.bg }]}>
+
+            {/* Cosmic details */}
+            <View
+               style={[
+                  styles.cosmicRow,
+                  { backgroundColor: "rgba(0,0,0,0.5)" },
+               ]}
+            >
                <Text style={styles.cosmicNakshatra}>
                   {profile.user.cosmicCard.nakshatra}
                </Text>
@@ -277,13 +220,26 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
                </Text>
                <View style={styles.cosmicDot} />
                <Text style={styles.cosmicAnimal}>
-                  {profile.user.cosmicCard.animal}
+                  🐾 {profile.user.cosmicCard.animal}
                </Text>
             </View>
+
+            {/* Top compatibility highlights */}
             <View style={styles.highlights}>
-               {profile.compatibility.highlights?.slice(0, 2).map((h) => (
-                  <View key={h.name} style={styles.highlightPill}>
-                     <Text style={styles.highlightText}>
+               {profile.compatibility.highlights?.slice(0, 3).map((h) => (
+                  <View
+                     key={h.name}
+                     style={[
+                        styles.highlightPill,
+                        h.score === h.max && { borderColor: COLORS.gold },
+                     ]}
+                  >
+                     <Text
+                        style={[
+                           styles.highlightText,
+                           h.score === h.max && { color: COLORS.gold },
+                        ]}
+                     >
                         {h.name} {h.score}/{h.max}
                      </Text>
                   </View>
@@ -298,126 +254,145 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
                   </View>
                )}
             </View>
+
+            {/* Guna score bar */}
+            <View style={styles.gunaBar}>
+               <View style={styles.gunaBarTrack}>
+                  <View
+                     style={[
+                        styles.gunaBarFill,
+                        {
+                           width: `${(profile.compatibility.totalScore / 36) * 100}%`,
+                           backgroundColor: vc.color,
+                        },
+                     ]}
+                  />
+               </View>
+            </View>
          </View>
       </Animated.View>
    );
 }
 
-// ── Main Screen ────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN DISCOVER SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
 export default function DiscoverScreen() {
-   const { token } = useAuthStore();
-   const [profiles, setProfiles] = useState([]);
-   const [loading, setLoading] = useState(true);
-   const [empty, setEmpty] = useState(false);
+   const dispatch = useDispatch();
+   const profiles = useSelector(selectProfiles);
+   const loading = useSelector(selectDiscoverLoading);
+   const isEmpty = useSelector(selectIsEmpty);
 
-   const isDev = !token || token.startsWith("dev_token");
-
-   const fetchProfiles = useCallback(async () => {
-      setLoading(true);
-      try {
-         if (isDev) {
-            // Shuffle mock profiles each time
-            const shuffled = [...MOCK_PROFILES].sort(() => Math.random() - 0.5);
-            setProfiles(shuffled);
-            setEmpty(false);
-            return;
-         }
-         const { matchingAPI } = await import("../../services/api");
-         const res = await matchingAPI.discover({ limit: 10 });
-         if (res.data.profiles.length === 0) setEmpty(true);
-         else {
-            setProfiles(res.data.profiles);
-            setEmpty(false);
-         }
-      } catch (err) {
-         console.error("Discover error:", err.message);
-         // Fall back to mock even in non-dev if API fails
-         setProfiles([...MOCK_PROFILES].sort(() => Math.random() - 0.5));
-      } finally {
-         setLoading(false);
-      }
-   }, []);
-
+   // Fetch profiles on mount
    useEffect(() => {
-      fetchProfiles();
+      console.log("[DISCOVER] Component mounted — fetching profiles...");
+      dispatch(fetchProfiles());
    }, []);
 
-   const handleLike = async (profile) => {
-      setProfiles((prev) => prev.filter((p) => p.user.id !== profile.user.id));
-      if (!isDev) {
-         try {
-            const { matchingAPI } = await import("../../services/api");
-            const res = await matchingAPI.like(profile.user.id);
-            if (res.data.isMatch)
+   // Auto-refetch when deck is running low (< 2 cards left)
+   useEffect(() => {
+      if (!loading && profiles.length <= 2 && profiles.length > 0) {
+         console.log(
+            "[DISCOVER] Deck running low, prefetching more profiles...",
+         );
+         dispatch(fetchProfiles());
+      }
+   }, [profiles.length]);
+
+   const handleLike = useCallback(
+      async (profile) => {
+         const userId = profile.user.id;
+
+         // 1. Optimistically remove from deck immediately (smooth UX)
+         dispatch(removeProfile(userId));
+
+         // 2. Call API
+         const result = await dispatch(likeProfile(userId));
+
+         if (likeProfile.fulfilled.match(result)) {
+            const data = result.payload;
+            if (data.isMatch) {
+               console.log(`[DISCOVER] 🎉 Match with ${profile.user.name}!`);
+
+               // Add to matches list in Redux
+               dispatch(
+                  addMatch({
+                     matchId: data.matchId,
+                     matchedAt: new Date().toISOString(),
+                     unreadCount: 0,
+                     user: {
+                        name: profile.user.name,
+                        photo: profile.user.photos?.[0] || null,
+                        cosmicCard: {
+                           nakshatra: profile.user.cosmicCard.nakshatra,
+                        },
+                     },
+                     compatibility: {
+                        gunaScore: profile.compatibility.totalScore,
+                        verdict: profile.compatibility.verdict,
+                     },
+                  }),
+               );
+
                Alert.alert(
                   "💫 Cosmic Match!",
-                  `You and ${profile.user.name} matched!`,
+                  `You and ${profile.user.name} are cosmically connected!\n\n${profile.compatibility.totalScore}/36 Gunas — ${profile.compatibility.verdict}`,
+                  [{ text: "Amazing! ✨", style: "default" }],
                );
-         } catch {}
-      } else {
-         // Every like = a match in dev mode (so you can test chat)
-         const alreadyMatched = DEV_MATCH_STORE.matches.find(
-            (m) => m.matchId === profile.user.id,
-         );
-         if (!alreadyMatched) {
-            const newMatch = {
-               matchId: profile.user.id,
-               matchedAt: new Date().toISOString(),
-               unreadCount: 0,
-               user: {
-                  name: profile.user.name,
-                  photo: null,
-                  cosmicCard: { nakshatra: profile.user.cosmicCard.nakshatra },
-               },
-               compatibility: {
-                  gunaScore: profile.compatibility.totalScore,
-                  verdict: profile.compatibility.verdict,
-               },
-            };
-            DEV_MATCH_STORE.matches = [newMatch, ...DEV_MATCH_STORE.matches];
-            Alert.alert(
-               "💫 Cosmic Match!",
-               `You and ${profile.user.name} matched! ${profile.compatibility.totalScore}/36 Gunas ✨`,
-            );
+            }
          }
-      }
-      if (profiles.length <= 2) fetchProfiles();
-   };
+      },
+      [dispatch],
+   );
 
-   const handlePass = (profile) => {
-      setProfiles((prev) => prev.filter((p) => p.user.id !== profile.user.id));
-      if (profiles.length <= 2) fetchProfiles();
-   };
+   const handlePass = useCallback(
+      (profile) => {
+         const userId = profile.user.id;
+         dispatch(removeProfile(userId));
+         dispatch(passProfile(userId));
+      },
+      [dispatch],
+   );
+
+   // Show top 3 cards stacked (index 0 = topmost)
+   const visibleProfiles = profiles.slice(0, 3);
 
    return (
       <View style={styles.container}>
+         {/* Header */}
          <View style={styles.header}>
             <Text style={styles.headerLogo}>🔮</Text>
             <Text style={styles.headerTitle}>DISCOVER</Text>
-            {isDev && <Text style={styles.devBadge}>DEV</Text>}
          </View>
 
+         {/* Card Deck */}
          <View style={styles.deck}>
             {loading ? (
-               <View style={styles.loadingState}>
+               <View style={styles.centerState}>
                   <ActivityIndicator color={COLORS.gold} size="large" />
-                  <Text style={styles.loadingText}>Reading the stars...</Text>
+                  <Text style={styles.centerText}>Reading the stars...</Text>
                </View>
-            ) : empty ? (
-               <View style={styles.emptyState}>
+            ) : isEmpty ? (
+               <View style={styles.centerState}>
                   <Text style={styles.emptyEmoji}>🌌</Text>
-                  <Text style={styles.emptyTitle}>No more profiles</Text>
-                  <Text style={styles.emptySubtitle}>Check back soon!</Text>
+                  <Text style={styles.emptyTitle}>You've seen everyone!</Text>
+                  <Text style={styles.emptySubtitle}>
+                     Check back later as new cosmic souls join
+                  </Text>
                   <TouchableOpacity
                      style={styles.refreshBtn}
-                     onPress={fetchProfiles}
+                     onPress={() => dispatch(fetchProfiles())}
                   >
                      <Text style={styles.refreshBtnText}>Refresh ✨</Text>
                   </TouchableOpacity>
                </View>
+            ) : profiles.length === 0 ? (
+               <View style={styles.centerState}>
+                  <ActivityIndicator color={COLORS.gold} size="large" />
+               </View>
             ) : (
-               [...profiles]
-                  .slice(0, 3)
+               // Render cards in reverse so top card is last (rendered on top)
+               [...visibleProfiles]
                   .reverse()
                   .map((profile, i, arr) => (
                      <SwipeCard
@@ -431,19 +406,28 @@ export default function DiscoverScreen() {
             )}
          </View>
 
-         {!loading && !empty && profiles.length > 0 && (
+         {/* Action buttons (like/pass) */}
+         {!loading && !isEmpty && profiles.length > 0 && (
             <View style={styles.actions}>
                <TouchableOpacity
                   style={[styles.actionBtn, styles.passBtn]}
                   onPress={() => handlePass(profiles[0])}
+                  activeOpacity={0.8}
                >
-                  <Text style={styles.actionBtnText}>✕</Text>
+                  <Text style={styles.passIcon}>✕</Text>
                </TouchableOpacity>
+
+               <View style={styles.countBadge}>
+                  <Text style={styles.countText}>{profiles.length}</Text>
+                  <Text style={styles.countLabel}>profiles</Text>
+               </View>
+
                <TouchableOpacity
                   style={[styles.actionBtn, styles.likeBtn]}
                   onPress={() => handleLike(profiles[0])}
+                  activeOpacity={0.8}
                >
-                  <Text style={styles.actionBtnText}>✦</Text>
+                  <Text style={styles.likeIcon}>✦</Text>
                </TouchableOpacity>
             </View>
          )}
@@ -456,10 +440,10 @@ const styles = StyleSheet.create({
    header: {
       flexDirection: "row",
       alignItems: "center",
-      gap: SPACING.sm,
       paddingHorizontal: SPACING.xl,
       paddingTop: 56,
       paddingBottom: SPACING.md,
+      gap: SPACING.sm,
    },
    headerLogo: { fontSize: 22 },
    headerTitle: {
@@ -469,16 +453,11 @@ const styles = StyleSheet.create({
       letterSpacing: 4,
       flex: 1,
    },
-   devBadge: {
-      fontFamily: FONTS.body,
-      fontSize: 10,
-      color: COLORS.bg,
-      backgroundColor: COLORS.gold,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
+   deck: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
    },
-   deck: { flex: 1, alignItems: "center", justifyContent: "center" },
    card: {
       position: "absolute",
       width: CARD_WIDTH,
@@ -486,11 +465,27 @@ const styles = StyleSheet.create({
       borderRadius: RADIUS.xl,
       overflow: "hidden",
       backgroundColor: COLORS.bgCard,
+      // Shadow for card depth
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.4,
+      shadowRadius: 16,
+      elevation: 12,
    },
-   cardPhoto: { width: "100%", height: "100%", position: "absolute" },
+   cardPhoto: {
+      width: "100%",
+      height: "100%",
+      position: "absolute",
+      alignItems: "center",
+      justifyContent: "center",
+   },
+   photoPlaceholder: { fontSize: 100, opacity: 0.4 },
+   photoNakshatraEmoji: { fontSize: 40, marginTop: 8 },
    cardOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: "rgba(0,0,0,0.15)",
+      ...StyleSheet.absoluteFillObject, // shorthand for position:absolute + all 0
+      backgroundColor: "transparent",
+      // Gradient-like bottom overlay using linear gradient (or just semi-transparent)
+      // For a real gradient, use expo-linear-gradient package
    },
    swipeLabel: {
       position: "absolute",
@@ -512,8 +507,7 @@ const styles = StyleSheet.create({
    },
    swipeLabelText: {
       fontFamily: FONTS.headingBold,
-      fontSize: 20,
-      color: COLORS.textPrimary,
+      fontSize: 22,
       letterSpacing: 2,
    },
    cardInfo: {
@@ -521,7 +515,9 @@ const styles = StyleSheet.create({
       bottom: 0,
       left: 0,
       right: 0,
-      padding: SPACING.lg,
+      padding: SPACING.md,
+      backgroundColor: "rgba(10, 11, 20, 0.85)",
+      paddingTop: SPACING.lg,
    },
    scoreBadge: {
       flexDirection: "row",
@@ -529,23 +525,27 @@ const styles = StyleSheet.create({
       gap: 6,
       borderWidth: 1.5,
       borderRadius: RADIUS.full,
-      paddingHorizontal: SPACING.sm + 4,
-      paddingVertical: 4,
+      paddingHorizontal: SPACING.md,
+      paddingVertical: 5,
       alignSelf: "flex-start",
-      backgroundColor: "rgba(0,0,0,0.5)",
+      backgroundColor: "rgba(0,0,0,0.4)",
       marginBottom: SPACING.sm,
    },
    scoreBadgeEmoji: { fontSize: 14 },
    scoreBadgeText: {
       fontFamily: FONTS.bodyBold,
-      fontSize: 14,
-      color: COLORS.textPrimary,
+      fontSize: 15,
+   },
+   scoreBadgeVerdict: {
+      fontFamily: FONTS.body,
+      fontSize: 11,
+      opacity: 0.8,
    },
    cardName: {
       fontFamily: FONTS.headingBold,
-      fontSize: 26,
+      fontSize: 24,
       color: COLORS.textPrimary,
-      marginBottom: SPACING.sm,
+      marginBottom: SPACING.xs,
    },
    cosmicRow: {
       flexDirection: "row",
@@ -566,17 +566,22 @@ const styles = StyleSheet.create({
       width: 3,
       height: 3,
       borderRadius: 2,
-      backgroundColor: "rgba(255,255,255,0.4)",
+      backgroundColor: "rgba(255,255,255,0.3)",
    },
    cosmicGana: { fontFamily: FONTS.bodyMedium, fontSize: 13 },
    cosmicAnimal: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 13,
+      fontFamily: FONTS.body,
+      fontSize: 12,
       color: COLORS.textSecondary,
    },
-   highlights: { flexDirection: "row", gap: SPACING.xs, flexWrap: "wrap" },
+   highlights: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: SPACING.xs,
+      marginBottom: SPACING.sm,
+   },
    highlightPill: {
-      backgroundColor: "rgba(0,0,0,0.5)",
+      backgroundColor: "rgba(0,0,0,0.4)",
       borderRadius: RADIUS.full,
       paddingHorizontal: 10,
       paddingVertical: 3,
@@ -588,11 +593,19 @@ const styles = StyleSheet.create({
       fontSize: 11,
       color: COLORS.textSecondary,
    },
+   gunaBar: { marginTop: 2 },
+   gunaBarTrack: {
+      height: 3,
+      backgroundColor: "rgba(255,255,255,0.1)",
+      borderRadius: 2,
+      overflow: "hidden",
+   },
+   gunaBarFill: { height: 3, borderRadius: 2 },
    actions: {
       flexDirection: "row",
       justifyContent: "center",
       alignItems: "center",
-      gap: SPACING.xl * 2,
+      gap: SPACING.xl,
       paddingVertical: SPACING.lg,
       paddingBottom: SPACING.xl,
    },
@@ -606,18 +619,37 @@ const styles = StyleSheet.create({
    },
    passBtn: {
       backgroundColor: COLORS.bgElevated,
-      borderWidth: 1.5,
+      borderWidth: 2,
       borderColor: "#E05C5C",
    },
-   likeBtn: { backgroundColor: COLORS.gold },
-   actionBtnText: { fontSize: 24, color: COLORS.textPrimary },
-   loadingState: { alignItems: "center", gap: SPACING.md },
-   loadingText: {
+   likeBtn: {
+      backgroundColor: COLORS.gold,
+      elevation: 12,
+   },
+   passIcon: { fontSize: 24, color: "#E05C5C" },
+   likeIcon: { fontSize: 24, color: COLORS.bg },
+   countBadge: { alignItems: "center" },
+   countText: {
+      fontFamily: FONTS.bodyBold,
+      fontSize: 20,
+      color: COLORS.gold,
+   },
+   countLabel: {
+      fontFamily: FONTS.body,
+      fontSize: 10,
+      color: COLORS.textDim,
+      letterSpacing: 1,
+   },
+   centerState: {
+      alignItems: "center",
+      paddingHorizontal: SPACING.xl,
+   },
+   centerText: {
       fontFamily: FONTS.body,
       fontSize: 15,
       color: COLORS.textSecondary,
+      marginTop: SPACING.md,
    },
-   emptyState: { alignItems: "center", paddingHorizontal: SPACING.xl },
    emptyEmoji: { fontSize: 64, marginBottom: SPACING.md },
    emptyTitle: {
       fontFamily: FONTS.heading,
@@ -627,18 +659,17 @@ const styles = StyleSheet.create({
    },
    emptySubtitle: {
       fontFamily: FONTS.body,
-      fontSize: 15,
+      fontSize: 14,
       color: COLORS.textSecondary,
       textAlign: "center",
       marginBottom: SPACING.xl,
    },
    refreshBtn: {
-      backgroundColor: COLORS.bgElevated,
+      borderWidth: 1,
+      borderColor: COLORS.gold,
       borderRadius: RADIUS.full,
       paddingHorizontal: SPACING.xl,
       paddingVertical: SPACING.md,
-      borderWidth: 1,
-      borderColor: COLORS.gold,
    },
    refreshBtnText: {
       fontFamily: FONTS.bodyMedium,

@@ -25,7 +25,9 @@
           "root": "./app"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ],
     "scheme": "vedicmate"
   }
