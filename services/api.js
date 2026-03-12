@@ -24,7 +24,7 @@ console.log("[API] Base URL:", BASE_URL);
 // ── Create Axios instance ─────────────────────────────────────────────────────
 const api = axios.create({
    baseURL: BASE_URL,
-   timeout: 15000, // 15 seconds — longer for mobile networks
+   timeout: 15000,
    headers: { "Content-Type": "application/json" },
 });
 
@@ -33,7 +33,6 @@ const api = axios.create({
 // The interceptor runs BEFORE every request automatically
 api.interceptors.request.use(
    async (config) => {
-      // Get token from AsyncStorage (same as localStorage in React.js but async)
       const token = await AsyncStorage.getItem("token");
       if (token) {
          config.headers.Authorization = `Bearer ${token}`;
@@ -61,7 +60,6 @@ api.interceptors.response.use(
       console.error(
          `[API ERROR] ${status} ${url} — ${err.response?.data?.message || err.message}`,
       );
-
       if (status === 401) {
          // Token expired or invalid — clear storage
          // The NavigationGuard in _layout.jsx will handle redirect to login
@@ -72,16 +70,13 @@ api.interceptors.response.use(
    },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// API FUNCTION GROUPS
-// ─────────────────────────────────────────────────────────────────────────────
-
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
    register: (data) => api.post("/auth/register", data),
    login: (data) => api.post("/auth/login", data),
    getMe: () => api.get("/auth/me"),
    savePushToken: (pushToken) => api.patch("/auth/push-token", { pushToken }),
+   updateMe: (data) => api.patch("/auth/me", data), // ← bio + future fields
 };
 
 // ── Onboarding ────────────────────────────────────────────────────────────────

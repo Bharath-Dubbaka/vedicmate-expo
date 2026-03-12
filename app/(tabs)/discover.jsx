@@ -1,14 +1,5 @@
 // app/(tabs)/discover.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// DISCOVER SCREEN — Tinder-style swipe with live Guna scores
-//
-// Key React Native concepts here:
-//   PanResponder = touch gesture handler (like mouse events in React.js, but for touch)
-//   Animated.event = maps gesture values directly to Animated.Value
-//   GestureHandler pattern: onStartShouldSetPanResponder → onPanResponderMove → onPanResponderRelease
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import {
    View,
    Text,
@@ -19,6 +10,9 @@ import {
    Dimensions,
    ActivityIndicator,
    Alert,
+   Modal,
+   ScrollView,
+   Pressable,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -36,39 +30,289 @@ import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width - SPACING.xl * 2;
 const CARD_HEIGHT = height * 0.62;
-const SWIPE_THRESHOLD = width * 0.35; // 35% of screen width = swipe commits
+const SWIPE_THRESHOLD = width * 0.35;
 
-// ── Verdict color config ───────────────────────────────────────────────────────
-const VERDICT_COLORS = {
+// ── Config ─────────────────────────────────────────────────────────────────
+const VERDICT_CONFIG = {
    "Excellent Match": { color: "#C9A84C", emoji: "🌟", barColor: "#C9A84C" },
    "Good Match": { color: "#4CAF50", emoji: "💚", barColor: "#4CAF50" },
    "Average Match": { color: "#7B8CDE", emoji: "💙", barColor: "#7B8CDE" },
    "Challenging Match": { color: "#FF9800", emoji: "⚠️", barColor: "#FF9800" },
 };
 
-const GANA_COLORS = {
-   Deva: { color: "#A78BFA", bg: "rgba(167,139,250,0.2)" },
-   Manushya: { color: "#60A5FA", bg: "rgba(96,165,250,0.2)" },
-   Rakshasa: { color: "#F87171", bg: "rgba(248,113,113,0.2)" },
+const GANA_CONFIG = {
+   Deva: {
+      color: "#A78BFA",
+      bg: "rgba(167,139,250,0.15)",
+      emoji: "✨",
+      label: "Divine Soul",
+   },
+   Manushya: {
+      color: "#60A5FA",
+      bg: "rgba(96,165,250,0.15)",
+      emoji: "🤝",
+      label: "Human Heart",
+   },
+   Rakshasa: {
+      color: "#F87171",
+      bg: "rgba(248,113,113,0.15)",
+      emoji: "🔥",
+      label: "Fierce Spirit",
+   },
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SWIPE CARD COMPONENT
-// Each profile card is its own component with its own PanResponder
-// ─────────────────────────────────────────────────────────────────────────────
-function SwipeCard({ profile, onLike, onPass, isTop }) {
-   // Each card has its own pan position (x/y offset from drag)
+const KOOTA_LIST = [
+   { key: "nadi", name: "Nadi", emoji: "🌊", max: 8 },
+   { key: "bhakoot", name: "Bhakoot", emoji: "🌕", max: 7 },
+   { key: "gana", name: "Gana", emoji: "✨", max: 6 },
+   { key: "grahaMaitri", name: "Graha Maitri", emoji: "🪐", max: 5 },
+   { key: "yoni", name: "Yoni", emoji: "🐾", max: 4 },
+   { key: "tara", name: "Tara", emoji: "⭐", max: 3 },
+   { key: "vashya", name: "Vashya", emoji: "💫", max: 2 },
+   { key: "varna", name: "Varna", emoji: "📿", max: 1 },
+];
+
+// ── Compatibility Modal ─────────────────────────────────────────────────────
+function CompatibilityModal({ visible, profile, onClose }) {
+   if (!profile) return null;
+
+   const vc =
+      VERDICT_CONFIG[profile.compatibility.verdict] ||
+      VERDICT_CONFIG["Average Match"];
+   const gc = GANA_CONFIG[profile.user.cosmicCard.gana] || GANA_CONFIG.Manushya;
+   const pct = Math.round((profile.compatibility.totalScore / 36) * 100);
+
+   return (
+      <Modal
+         visible={visible}
+         animationType="slide"
+         presentationStyle="pageSheet"
+         onRequestClose={onClose}
+      >
+         <View style={modal.container}>
+            {/* Handle bar */}
+            <View style={modal.handle} />
+
+            <ScrollView
+               style={{ flex: 1 }}
+               contentContainerStyle={modal.scroll}
+               showsVerticalScrollIndicator={false}
+            >
+               {/* Header — name + verdict */}
+               <View style={modal.header}>
+                  <View style={modal.headerLeft}>
+                     <Text style={modal.personName}>
+                        {profile.user.name}, {profile.user.age}
+                     </Text>
+                     <Text style={modal.personSub}>
+                        {profile.user.cosmicCard.nakshatra} ·{" "}
+                        {profile.user.cosmicCard.rashi} Moon
+                     </Text>
+                  </View>
+                  <View style={[modal.verdictBadge, { borderColor: vc.color }]}>
+                     <Text style={modal.verdictEmoji}>{vc.emoji}</Text>
+                     <View>
+                        <Text style={[modal.verdictScore, { color: vc.color }]}>
+                           {profile.compatibility.totalScore}/36
+                        </Text>
+                        <Text style={[modal.verdictLabel, { color: vc.color }]}>
+                           {profile.compatibility.verdict}
+                        </Text>
+                     </View>
+                  </View>
+               </View>
+
+               {/* Score arc / big number */}
+               <View style={modal.scoreHero}>
+                  <View style={[modal.scoreCircle, { borderColor: vc.color }]}>
+                     <Text style={[modal.scoreNumber, { color: vc.color }]}>
+                        {pct}%
+                     </Text>
+                     <Text style={modal.scoreLabel}>compatible</Text>
+                  </View>
+
+                  {/* Cosmic identity row */}
+                  <View style={modal.cosmicIdentity}>
+                     <View
+                        style={[
+                           modal.ganaChip,
+                           { backgroundColor: gc.bg, borderColor: gc.color },
+                        ]}
+                     >
+                        <Text style={modal.ganaChipEmoji}>{gc.emoji}</Text>
+                        <Text style={[modal.ganaChipText, { color: gc.color }]}>
+                           {profile.user.cosmicCard.gana} · {gc.label}
+                        </Text>
+                     </View>
+                     <View style={modal.cosmicDetails}>
+                        <Text style={modal.cosmicDetail}>
+                           🐾 {profile.user.cosmicCard.animal}
+                        </Text>
+                        <Text style={modal.cosmicDetailDot}>·</Text>
+                        <Text style={modal.cosmicDetail}>
+                           🌙 {profile.user.cosmicCard.rashi}
+                        </Text>
+                        <Text style={modal.cosmicDetailDot}>·</Text>
+                        <Text style={modal.cosmicDetail}>
+                           💫 {profile.user.cosmicCard.nadi}
+                        </Text>
+                     </View>
+                  </View>
+               </View>
+
+               {/* 8 Koota breakdown */}
+               <Text style={modal.sectionTitle}>ASHTA KOOTA BREAKDOWN</Text>
+               <View style={modal.kootaCard}>
+                  {KOOTA_LIST.map((k, idx) => {
+                     const entry = profile.compatibility.breakdown?.[k.key];
+                     const score = entry?.score ?? 0;
+                     const maxVal = entry?.max ?? k.max;
+                     const isPerfect = score === maxVal;
+                     const isZero = score === 0;
+                     const barPct = (score / maxVal) * 100;
+                     const barColor = isPerfect
+                        ? COLORS.gold
+                        : isZero
+                          ? "#E05C5C"
+                          : vc.color;
+
+                     return (
+                        <View
+                           key={k.key}
+                           style={[
+                              modal.kootaRow,
+                              idx < KOOTA_LIST.length - 1 &&
+                                 modal.kootaRowBorder,
+                           ]}
+                        >
+                           <Text style={modal.kootaEmoji}>{k.emoji}</Text>
+                           <View style={{ flex: 1 }}>
+                              <View style={modal.kootaTopRow}>
+                                 <Text style={modal.kootaName}>{k.name}</Text>
+                                 <Text
+                                    style={[
+                                       modal.kootaScore,
+                                       isPerfect && { color: COLORS.gold },
+                                       isZero && { color: "#E05C5C" },
+                                    ]}
+                                 >
+                                    {score}/{maxVal}
+                                    {isPerfect ? " ✓" : isZero ? " ✕" : ""}
+                                 </Text>
+                              </View>
+                              <View style={modal.kootaBarTrack}>
+                                 <View
+                                    style={[
+                                       modal.kootaBarFill,
+                                       {
+                                          width: `${barPct}%`,
+                                          backgroundColor: barColor,
+                                       },
+                                    ]}
+                                 />
+                              </View>
+                           </View>
+                        </View>
+                     );
+                  })}
+               </View>
+
+               {/* Doshas section */}
+               {profile.compatibility.doshas?.length > 0 && (
+                  <>
+                     <Text style={modal.sectionTitle}>DOSHAS</Text>
+                     <View style={modal.doshaCard}>
+                        {profile.compatibility.doshas.map((d, i) => (
+                           <View
+                              key={i}
+                              style={[
+                                 modal.doshaRow,
+                                 i < profile.compatibility.doshas.length - 1 &&
+                                    modal.doshaRowBorder,
+                              ]}
+                           >
+                              <View style={modal.doshaBadge}>
+                                 <Text style={modal.doshaBadgeText}>
+                                    {d.severity === "high" ? "⚠️" : "ℹ️"}
+                                 </Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                 <Text style={modal.doshaName}>{d.name}</Text>
+                                 <Text style={modal.doshaDesc}>
+                                    {d.description}
+                                 </Text>
+                                 {d.cancellation && (
+                                    <Text style={modal.doshaCancelled}>
+                                       ✓ {d.cancellation}
+                                    </Text>
+                                 )}
+                              </View>
+                           </View>
+                        ))}
+                     </View>
+                  </>
+               )}
+
+               {/* Highlights */}
+               {profile.compatibility.highlights?.length > 0 && (
+                  <>
+                     <Text style={modal.sectionTitle}>TOP STRENGTHS</Text>
+                     <View style={modal.highlightsRow}>
+                        {profile.compatibility.highlights
+                           .slice(0, 4)
+                           .map((h) => (
+                              <View
+                                 key={h.name}
+                                 style={[
+                                    modal.strengthChip,
+                                    h.score === h.max && {
+                                       borderColor: COLORS.gold,
+                                       backgroundColor: "rgba(201,168,76,0.1)",
+                                    },
+                                 ]}
+                              >
+                                 <Text
+                                    style={[
+                                       modal.strengthScore,
+                                       h.score === h.max && {
+                                          color: COLORS.gold,
+                                       },
+                                    ]}
+                                 >
+                                    {h.score}/{h.max}
+                                 </Text>
+                                 <Text style={modal.strengthName}>
+                                    {h.name}
+                                 </Text>
+                              </View>
+                           ))}
+                     </View>
+                  </>
+               )}
+
+               <View style={{ height: 40 }} />
+            </ScrollView>
+
+            {/* Action buttons */}
+            <View style={modal.footer}>
+               <TouchableOpacity style={modal.closeBtn} onPress={onClose}>
+                  <Text style={modal.closeBtnText}>Close</Text>
+               </TouchableOpacity>
+            </View>
+         </View>
+      </Modal>
+   );
+}
+
+// ── Swipe Card ──────────────────────────────────────────────────────────────
+function SwipeCard({ profile, onLike, onPass, isTop, onOpenReport }) {
    const pan = useRef(new Animated.ValueXY()).current;
 
-   // Interpolations derive animated values from another animated value
-   // This is like CSS calc() but reactive
    const rotate = pan.x.interpolate({
       inputRange: [-width / 2, 0, width / 2],
       outputRange: ["-10deg", "0deg", "10deg"],
-      extrapolate: "clamp", // don't go beyond the range
+      extrapolate: "clamp",
    });
-
-   // Show LIKE/PASS labels when swiping
    const likeOpacity = pan.x.interpolate({
       inputRange: [0, 80],
       outputRange: [0, 1],
@@ -80,41 +324,24 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
       extrapolate: "clamp",
    });
 
-   // ── PanResponder ──────────────────────────────────────────────────────────
-   // Think of this as event listeners for touch gestures
    const panResponder = useRef(
       PanResponder.create({
-         // Should this responder handle the gesture?
-         onStartShouldSetPanResponder: () => isTop, // only top card responds
-
-         // As finger moves: update pan position
-         onPanResponderMove: Animated.event(
-            [null, { dx: pan.x, dy: pan.y }], // map gesture delta to pan.x, pan.y
-            { useNativeDriver: false }, // can't use native driver for ValueXY moves
-         ),
-
-         // When finger lifts: decide what to do
+         onStartShouldSetPanResponder: () => isTop,
+         onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
+            useNativeDriver: false,
+         }),
          onPanResponderRelease: (_, gesture) => {
             if (gesture.dx > SWIPE_THRESHOLD) {
-               // Swiped right → LIKE
-               console.log(
-                  `[SWIPE CARD] Swiping RIGHT (like) for: ${profile.user.name}`,
-               );
                Animated.spring(pan, {
                   toValue: { x: width * 1.5, y: gesture.dy },
                   useNativeDriver: false,
                }).start(() => onLike(profile));
             } else if (gesture.dx < -SWIPE_THRESHOLD) {
-               // Swiped left → PASS
-               console.log(
-                  `[SWIPE CARD] Swiping LEFT (pass) for: ${profile.user.name}`,
-               );
                Animated.spring(pan, {
                   toValue: { x: -width * 1.5, y: gesture.dy },
                   useNativeDriver: false,
                }).start(() => onPass(profile));
             } else {
-               // Didn't swipe far enough → snap back
                Animated.spring(pan, {
                   toValue: { x: 0, y: 0 },
                   friction: 5,
@@ -126,9 +353,9 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
    ).current;
 
    const vc =
-      VERDICT_COLORS[profile.compatibility.verdict] ||
-      VERDICT_COLORS["Average Match"];
-   const gc = GANA_COLORS[profile.user.cosmicCard.gana] || GANA_COLORS.Manushya;
+      VERDICT_CONFIG[profile.compatibility.verdict] ||
+      VERDICT_CONFIG["Average Match"];
+   const gc = GANA_CONFIG[profile.user.cosmicCard.gana] || GANA_CONFIG.Manushya;
 
    return (
       <Animated.View
@@ -144,10 +371,8 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
             },
          ]}
          {...(isTop ? panResponder.panHandlers : {})}
-         // panHandlers spreads: onStartShouldSetResponder, onResponderMove, etc.
-         // This is how PanResponder attaches to a View
       >
-         {/* Photo area — shows emoji placeholder until photo upload is built */}
+         {/* Photo area */}
          <View style={[styles.cardPhoto, { backgroundColor: gc.bg }]}>
             <Text style={styles.photoPlaceholder}>👤</Text>
             <Text style={styles.photoNakshatraEmoji}>
@@ -155,10 +380,7 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
             </Text>
          </View>
 
-         {/* Dark gradient overlay at bottom of card */}
-         <View style={styles.cardOverlay} />
-
-         {/* LIKE / PASS labels (animated opacity) */}
+         {/* LIKE / PASS labels */}
          {isTop && (
             <>
                <Animated.View
@@ -188,74 +410,121 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
 
          {/* Card info overlay */}
          <View style={styles.cardInfo}>
-            {/* Guna score badge */}
-            <View style={[styles.scoreBadge, { borderColor: vc.color }]}>
-               <Text style={styles.scoreBadgeEmoji}>{vc.emoji}</Text>
-               <Text style={[styles.scoreBadgeText, { color: vc.color }]}>
-                  {profile.compatibility.totalScore}/36
+            {/* Name + age */}
+            <View style={styles.nameRow}>
+               <Text style={styles.cardName}>
+                  {profile.user.name}, {profile.user.age}
                </Text>
-               <Text style={[styles.scoreBadgeVerdict, { color: vc.color }]}>
-                  {profile.compatibility.verdict}
-               </Text>
+               {/* Guna score badge */}
+               <View style={[styles.scoreBadge, { borderColor: vc.color }]}>
+                  <Text style={styles.scoreBadgeEmoji}>{vc.emoji}</Text>
+                  <Text style={[styles.scoreBadgeText, { color: vc.color }]}>
+                     {profile.compatibility.totalScore}/36
+                  </Text>
+               </View>
             </View>
 
-            {/* Name & age */}
-            <Text style={styles.cardName}>
-               {profile.user.name}, {profile.user.age}
-            </Text>
-
-            {/* Cosmic details */}
+            {/* ── Cosmic Identity Panel ── */}
             <View
-               style={[
-                  styles.cosmicRow,
-                  { backgroundColor: "rgba(0,0,0,0.5)" },
-               ]}
+               style={[styles.cosmicPanel, { borderColor: gc.color + "40" }]}
             >
-               <Text style={styles.cosmicNakshatra}>
-                  {profile.user.cosmicCard.nakshatra}
-               </Text>
-               <View style={styles.cosmicDot} />
-               <Text style={[styles.cosmicGana, { color: gc.color }]}>
-                  {profile.user.cosmicCard.gana}
-               </Text>
-               <View style={styles.cosmicDot} />
-               <Text style={styles.cosmicAnimal}>
-                  🐾 {profile.user.cosmicCard.animal}
-               </Text>
-            </View>
-
-            {/* Top compatibility highlights */}
-            <View style={styles.highlights}>
-               {profile.compatibility.highlights?.slice(0, 3).map((h) => (
-                  <View
-                     key={h.name}
-                     style={[
-                        styles.highlightPill,
-                        h.score === h.max && { borderColor: COLORS.gold },
-                     ]}
-                  >
-                     <Text
-                        style={[
-                           styles.highlightText,
-                           h.score === h.max && { color: COLORS.gold },
-                        ]}
-                     >
-                        {h.name} {h.score}/{h.max}
+               {/* Row 1: Nakshatra + Rashi */}
+               <View style={styles.cosmicPanelRow}>
+                  <Text style={styles.cosmicNakshatraSymbol}>
+                     {profile.user.cosmicCard.nakshatra?.split(" ")[0]}
+                  </Text>
+                  <View style={{ flex: 1 }}>
+                     <Text style={styles.cosmicNakshatraName}>
+                        {profile.user.cosmicCard.nakshatra
+                           ?.split(" ")
+                           .slice(1)
+                           .join(" ") || profile.user.cosmicCard.nakshatra}
+                     </Text>
+                     <Text style={styles.cosmicRashi}>
+                        {profile.user.cosmicCard.rashi} Moon · Pada{" "}
+                        {profile.user.cosmicCard.pada}
                      </Text>
                   </View>
-               ))}
-               {profile.compatibility.hasDoshas && (
-                  <View
-                     style={[styles.highlightPill, { borderColor: "#FF9800" }]}
-                  >
-                     <Text style={[styles.highlightText, { color: "#FF9800" }]}>
-                        ⚠️ Dosha
+                  {/* Gana badge */}
+                  <View style={[styles.ganaBadge, { backgroundColor: gc.bg }]}>
+                     <Text style={styles.ganaEmoji}>{gc.emoji}</Text>
+                     <Text style={[styles.ganaText, { color: gc.color }]}>
+                        {profile.user.cosmicCard.gana}
                      </Text>
                   </View>
-               )}
+               </View>
+
+               {/* Row 2: Animal + Nadi + Varna */}
+               <View style={styles.cosmicTagRow}>
+                  <View style={styles.cosmicTag}>
+                     <Text style={styles.cosmicTagText}>
+                        🐾 {profile.user.cosmicCard.animal}
+                     </Text>
+                  </View>
+                  <View style={styles.cosmicTag}>
+                     <Text style={styles.cosmicTagText}>
+                        🌊 {profile.user.cosmicCard.nadi}
+                     </Text>
+                  </View>
+                  <View style={styles.cosmicTag}>
+                     <Text style={styles.cosmicTagText}>
+                        🪐 {profile.user.cosmicCard.lordPlanet}
+                     </Text>
+                  </View>
+               </View>
+
+               {/* Row 3: Mini koota bars (top 3) */}
+               <View style={styles.miniKootas}>
+                  {KOOTA_LIST.slice(0, 3).map((k) => {
+                     const entry = profile.compatibility.breakdown?.[k.key];
+                     const score = entry?.score ?? 0;
+                     const maxVal = entry?.max ?? k.max;
+                     const barPct = (score / maxVal) * 100;
+                     const barCol =
+                        score === maxVal
+                           ? COLORS.gold
+                           : score === 0
+                             ? "#E05C5C"
+                             : vc.color;
+                     return (
+                        <View key={k.key} style={styles.miniKootaItem}>
+                           <Text style={styles.miniKootaLabel}>
+                              {k.emoji} {k.name}
+                           </Text>
+                           <View style={styles.miniKootaTrack}>
+                              <View
+                                 style={[
+                                    styles.miniKootaFill,
+                                    {
+                                       width: `${barPct}%`,
+                                       backgroundColor: barCol,
+                                    },
+                                 ]}
+                              />
+                           </View>
+                           <Text
+                              style={[styles.miniKootaScore, { color: barCol }]}
+                           >
+                              {score}/{maxVal}
+                           </Text>
+                        </View>
+                     );
+                  })}
+               </View>
+
+               {/* Tap to expand */}
+               <TouchableOpacity
+                  style={styles.expandBtn}
+                  onPress={() => isTop && onOpenReport(profile)}
+                  activeOpacity={0.7}
+               >
+                  <Text style={styles.expandBtnText}>
+                     View full compatibility report ›
+                  </Text>
+               </TouchableOpacity>
             </View>
 
-            {/* Guna score bar */}
+            {/* Guna bar */}
             <View style={styles.gunaBar}>
                <View style={styles.gunaBarTrack}>
                   <View
@@ -274,72 +543,54 @@ function SwipeCard({ profile, onLike, onPass, isTop }) {
    );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN DISCOVER SCREEN
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Main Discover Screen ────────────────────────────────────────────────────
 export default function DiscoverScreen() {
    const dispatch = useDispatch();
    const profiles = useSelector(selectProfiles);
    const loading = useSelector(selectDiscoverLoading);
    const isEmpty = useSelector(selectIsEmpty);
 
-   // Fetch profiles on mount
+   const [reportProfile, setReportProfile] = useState(null);
+
    useEffect(() => {
-      console.log("[DISCOVER] Component mounted — fetching profiles...");
       dispatch(fetchProfiles());
    }, []);
 
-   // Auto-refetch when deck is running low (< 2 cards left)
    useEffect(() => {
       if (!loading && profiles.length <= 2 && profiles.length > 0) {
-         console.log(
-            "[DISCOVER] Deck running low, prefetching more profiles...",
-         );
          dispatch(fetchProfiles());
       }
    }, [profiles.length]);
 
    const handleLike = useCallback(
       async (profile) => {
-         const userId = profile.user.id;
+         dispatch(removeProfile(profile.user.id));
+         const result = await dispatch(likeProfile(profile.user.id));
 
-         // 1. Optimistically remove from deck immediately (smooth UX)
-         dispatch(removeProfile(userId));
-
-         // 2. Call API
-         const result = await dispatch(likeProfile(userId));
-
-         if (likeProfile.fulfilled.match(result)) {
-            const data = result.payload;
-            if (data.isMatch) {
-               console.log(`[DISCOVER] 🎉 Match with ${profile.user.name}!`);
-
-               // Add to matches list in Redux
-               dispatch(
-                  addMatch({
-                     matchId: data.matchId,
-                     matchedAt: new Date().toISOString(),
-                     unreadCount: 0,
-                     user: {
-                        name: profile.user.name,
-                        photo: profile.user.photos?.[0] || null,
-                        cosmicCard: {
-                           nakshatra: profile.user.cosmicCard.nakshatra,
-                        },
+         if (likeProfile.fulfilled.match(result) && result.payload.isMatch) {
+            dispatch(
+               addMatch({
+                  matchId: result.payload.matchId,
+                  matchedAt: new Date().toISOString(),
+                  unreadCount: 0,
+                  user: {
+                     name: profile.user.name,
+                     photo: profile.user.photos?.[0] || null,
+                     cosmicCard: {
+                        nakshatra: profile.user.cosmicCard.nakshatra,
                      },
-                     compatibility: {
-                        gunaScore: profile.compatibility.totalScore,
-                        verdict: profile.compatibility.verdict,
-                     },
-                  }),
-               );
-
-               Alert.alert(
-                  "💫 Cosmic Match!",
-                  `You and ${profile.user.name} are cosmically connected!\n\n${profile.compatibility.totalScore}/36 Gunas — ${profile.compatibility.verdict}`,
-                  [{ text: "Amazing! ✨", style: "default" }],
-               );
-            }
+                  },
+                  compatibility: {
+                     gunaScore: profile.compatibility.totalScore,
+                     verdict: profile.compatibility.verdict,
+                  },
+               }),
+            );
+            Alert.alert(
+               "💫 Cosmic Match!",
+               `You and ${profile.user.name} are cosmically connected!\n\n${profile.compatibility.totalScore}/36 Gunas — ${profile.compatibility.verdict}`,
+               [{ text: "Amazing! ✨" }],
+            );
          }
       },
       [dispatch],
@@ -347,14 +598,12 @@ export default function DiscoverScreen() {
 
    const handlePass = useCallback(
       (profile) => {
-         const userId = profile.user.id;
-         dispatch(removeProfile(userId));
-         dispatch(passProfile(userId));
+         dispatch(removeProfile(profile.user.id));
+         dispatch(passProfile(profile.user.id));
       },
       [dispatch],
    );
 
-   // Show top 3 cards stacked (index 0 = topmost)
    const visibleProfiles = profiles.slice(0, 3);
 
    return (
@@ -391,7 +640,6 @@ export default function DiscoverScreen() {
                   <ActivityIndicator color={COLORS.gold} size="large" />
                </View>
             ) : (
-               // Render cards in reverse so top card is last (rendered on top)
                [...visibleProfiles]
                   .reverse()
                   .map((profile, i, arr) => (
@@ -401,12 +649,13 @@ export default function DiscoverScreen() {
                         onLike={handleLike}
                         onPass={handlePass}
                         isTop={i === arr.length - 1}
+                        onOpenReport={setReportProfile}
                      />
                   ))
             )}
          </View>
 
-         {/* Action buttons (like/pass) */}
+         {/* Action buttons */}
          {!loading && !isEmpty && profiles.length > 0 && (
             <View style={styles.actions}>
                <TouchableOpacity
@@ -431,10 +680,18 @@ export default function DiscoverScreen() {
                </TouchableOpacity>
             </View>
          )}
+
+         {/* Compatibility modal */}
+         <CompatibilityModal
+            visible={!!reportProfile}
+            profile={reportProfile}
+            onClose={() => setReportProfile(null)}
+         />
       </View>
    );
 }
 
+// ── Styles ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
    container: { flex: 1, backgroundColor: COLORS.bg },
    header: {
@@ -453,11 +710,7 @@ const styles = StyleSheet.create({
       letterSpacing: 4,
       flex: 1,
    },
-   deck: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-   },
+   deck: { flex: 1, alignItems: "center", justifyContent: "center" },
    card: {
       position: "absolute",
       width: CARD_WIDTH,
@@ -465,7 +718,6 @@ const styles = StyleSheet.create({
       borderRadius: RADIUS.xl,
       overflow: "hidden",
       backgroundColor: COLORS.bgCard,
-      // Shadow for card depth
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.4,
@@ -474,19 +726,12 @@ const styles = StyleSheet.create({
    },
    cardPhoto: {
       width: "100%",
-      height: "100%",
-      position: "absolute",
+      height: "55%",
       alignItems: "center",
       justifyContent: "center",
    },
-   photoPlaceholder: { fontSize: 100, opacity: 0.4 },
-   photoNakshatraEmoji: { fontSize: 40, marginTop: 8 },
-   cardOverlay: {
-      ...StyleSheet.absoluteFillObject, // shorthand for position:absolute + all 0
-      backgroundColor: "transparent",
-      // Gradient-like bottom overlay using linear gradient (or just semi-transparent)
-      // For a real gradient, use expo-linear-gradient package
-   },
+   photoPlaceholder: { fontSize: 80, opacity: 0.4 },
+   photoNakshatraEmoji: { fontSize: 36, marginTop: 6 },
    swipeLabel: {
       position: "absolute",
       top: 40,
@@ -510,97 +755,145 @@ const styles = StyleSheet.create({
       fontSize: 22,
       letterSpacing: 2,
    },
+
+   // ── Card info ──
    cardInfo: {
       position: "absolute",
       bottom: 0,
       left: 0,
       right: 0,
-      padding: SPACING.md,
-      backgroundColor: "rgba(10, 11, 20, 0.85)",
-      paddingTop: SPACING.lg,
+      backgroundColor: "rgba(10,11,20,0.92)",
+      paddingHorizontal: SPACING.md,
+      paddingTop: SPACING.sm,
+      paddingBottom: SPACING.sm,
+   },
+   nameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: SPACING.sm,
+   },
+   cardName: {
+      fontFamily: FONTS.headingBold,
+      fontSize: 22,
+      color: COLORS.textPrimary,
    },
    scoreBadge: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 6,
+      gap: 5,
       borderWidth: 1.5,
       borderRadius: RADIUS.full,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: 5,
-      alignSelf: "flex-start",
+      paddingHorizontal: SPACING.sm,
+      paddingVertical: 4,
       backgroundColor: "rgba(0,0,0,0.4)",
+   },
+   scoreBadgeEmoji: { fontSize: 12 },
+   scoreBadgeText: { fontFamily: FONTS.bodyBold, fontSize: 14 },
+
+   // ── Cosmic panel ──
+   cosmicPanel: {
+      borderWidth: 1,
+      borderRadius: RADIUS.lg,
+      padding: SPACING.sm,
       marginBottom: SPACING.sm,
+      backgroundColor: "rgba(255,255,255,0.04)",
    },
-   scoreBadgeEmoji: { fontSize: 14 },
-   scoreBadgeText: {
-      fontFamily: FONTS.bodyBold,
-      fontSize: 15,
-   },
-   scoreBadgeVerdict: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      opacity: 0.8,
-   },
-   cardName: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 24,
-      color: COLORS.textPrimary,
-      marginBottom: SPACING.xs,
-   },
-   cosmicRow: {
+   cosmicPanelRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: SPACING.sm,
-      borderRadius: RADIUS.full,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: 6,
-      alignSelf: "flex-start",
-      marginBottom: SPACING.sm,
+      marginBottom: SPACING.xs,
    },
-   cosmicNakshatra: {
+   cosmicNakshatraSymbol: { fontSize: 28 },
+   cosmicNakshatraName: {
       fontFamily: FONTS.bodyMedium,
-      fontSize: 13,
+      fontSize: 14,
       color: COLORS.textPrimary,
+      lineHeight: 18,
    },
-   cosmicDot: {
-      width: 3,
-      height: 3,
-      borderRadius: 2,
-      backgroundColor: "rgba(255,255,255,0.3)",
-   },
-   cosmicGana: { fontFamily: FONTS.bodyMedium, fontSize: 13 },
-   cosmicAnimal: {
-      fontFamily: FONTS.body,
-      fontSize: 12,
-      color: COLORS.textSecondary,
-   },
-   highlights: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: SPACING.xs,
-      marginBottom: SPACING.sm,
-   },
-   highlightPill: {
-      backgroundColor: "rgba(0,0,0,0.4)",
-      borderRadius: RADIUS.full,
-      paddingHorizontal: 10,
-      paddingVertical: 3,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-   },
-   highlightText: {
+   cosmicRashi: {
       fontFamily: FONTS.body,
       fontSize: 11,
       color: COLORS.textSecondary,
    },
-   gunaBar: { marginTop: 2 },
-   gunaBarTrack: {
+   ganaBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: RADIUS.md,
+   },
+   ganaEmoji: { fontSize: 12 },
+   ganaText: { fontFamily: FONTS.bodyMedium, fontSize: 11 },
+   cosmicTagRow: {
+      flexDirection: "row",
+      gap: SPACING.xs,
+      marginBottom: SPACING.sm,
+      flexWrap: "wrap",
+   },
+   cosmicTag: {
+      backgroundColor: "rgba(255,255,255,0.06)",
+      borderRadius: RADIUS.sm,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+   },
+   cosmicTagText: {
+      fontFamily: FONTS.body,
+      fontSize: 11,
+      color: COLORS.textSecondary,
+   },
+
+   // ── Mini koota bars ──
+   miniKootas: { gap: 5, marginBottom: SPACING.sm },
+   miniKootaItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACING.sm,
+   },
+   miniKootaLabel: {
+      fontFamily: FONTS.body,
+      fontSize: 11,
+      color: COLORS.textSecondary,
+      width: 80,
+   },
+   miniKootaTrack: {
+      flex: 1,
       height: 3,
-      backgroundColor: "rgba(255,255,255,0.1)",
+      backgroundColor: "rgba(255,255,255,0.08)",
       borderRadius: 2,
       overflow: "hidden",
    },
-   gunaBarFill: { height: 3, borderRadius: 2 },
+   miniKootaFill: { height: 3, borderRadius: 2 },
+   miniKootaScore: {
+      fontFamily: FONTS.bodyBold,
+      fontSize: 11,
+      width: 28,
+      textAlign: "right",
+   },
+
+   expandBtn: {
+      alignItems: "center",
+      paddingVertical: 4,
+   },
+   expandBtnText: {
+      fontFamily: FONTS.body,
+      fontSize: 11,
+      color: COLORS.gold,
+      opacity: 0.8,
+   },
+
+   gunaBar: { marginTop: 2 },
+   gunaBarTrack: {
+      height: 2,
+      backgroundColor: "rgba(255,255,255,0.08)",
+      borderRadius: 1,
+      overflow: "hidden",
+   },
+   gunaBarFill: { height: 2, borderRadius: 1 },
+
+   // ── Actions ──
    actions: {
       flexDirection: "row",
       justifyContent: "center",
@@ -622,28 +915,20 @@ const styles = StyleSheet.create({
       borderWidth: 2,
       borderColor: "#E05C5C",
    },
-   likeBtn: {
-      backgroundColor: COLORS.gold,
-      elevation: 12,
-   },
+   likeBtn: { backgroundColor: COLORS.gold, elevation: 12 },
    passIcon: { fontSize: 24, color: "#E05C5C" },
    likeIcon: { fontSize: 24, color: COLORS.bg },
    countBadge: { alignItems: "center" },
-   countText: {
-      fontFamily: FONTS.bodyBold,
-      fontSize: 20,
-      color: COLORS.gold,
-   },
+   countText: { fontFamily: FONTS.bodyBold, fontSize: 20, color: COLORS.gold },
    countLabel: {
       fontFamily: FONTS.body,
       fontSize: 10,
       color: COLORS.textDim,
       letterSpacing: 1,
    },
-   centerState: {
-      alignItems: "center",
-      paddingHorizontal: SPACING.xl,
-   },
+
+   // ── Empty / loading states ──
+   centerState: { alignItems: "center", paddingHorizontal: SPACING.xl },
    centerText: {
       fontFamily: FONTS.body,
       fontSize: 15,
@@ -675,5 +960,236 @@ const styles = StyleSheet.create({
       fontFamily: FONTS.bodyMedium,
       fontSize: 14,
       color: COLORS.gold,
+   },
+});
+
+// ── Modal styles ─────────────────────────────────────────────────────────────
+const modal = StyleSheet.create({
+   container: { flex: 1, backgroundColor: COLORS.bg },
+   handle: {
+      width: 40,
+      height: 4,
+      backgroundColor: COLORS.border,
+      borderRadius: 2,
+      alignSelf: "center",
+      marginTop: 12,
+      marginBottom: 4,
+   },
+   scroll: { padding: SPACING.xl },
+   header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: SPACING.lg,
+   },
+   headerLeft: { flex: 1, marginRight: SPACING.md },
+   personName: {
+      fontFamily: FONTS.headingBold,
+      fontSize: 22,
+      color: COLORS.textPrimary,
+      marginBottom: 2,
+   },
+   personSub: {
+      fontFamily: FONTS.body,
+      fontSize: 13,
+      color: COLORS.textSecondary,
+   },
+   verdictBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACING.sm,
+      borderWidth: 1.5,
+      borderRadius: RADIUS.lg,
+      paddingHorizontal: SPACING.md,
+      paddingVertical: SPACING.sm,
+      backgroundColor: "rgba(0,0,0,0.3)",
+   },
+   verdictEmoji: { fontSize: 18 },
+   verdictScore: { fontFamily: FONTS.bodyBold, fontSize: 16 },
+   verdictLabel: { fontFamily: FONTS.body, fontSize: 11 },
+
+   scoreHero: { alignItems: "center", marginBottom: SPACING.xl },
+   scoreCircle: {
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      borderWidth: 2.5,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: SPACING.md,
+      backgroundColor: "rgba(255,255,255,0.03)",
+   },
+   scoreNumber: { fontFamily: FONTS.headingBold, fontSize: 26 },
+   scoreLabel: {
+      fontFamily: FONTS.body,
+      fontSize: 11,
+      color: COLORS.textSecondary,
+   },
+   cosmicIdentity: { alignItems: "center", gap: SPACING.sm, width: "100%" },
+   ganaChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: SPACING.md,
+      paddingVertical: 6,
+      borderRadius: RADIUS.full,
+      borderWidth: 1,
+   },
+   ganaChipEmoji: { fontSize: 14 },
+   ganaChipText: { fontFamily: FONTS.bodyMedium, fontSize: 13 },
+   cosmicDetails: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACING.sm,
+   },
+   cosmicDetail: {
+      fontFamily: FONTS.body,
+      fontSize: 13,
+      color: COLORS.textSecondary,
+   },
+   cosmicDetailDot: {
+      color: COLORS.textDim,
+      fontSize: 13,
+   },
+
+   sectionTitle: {
+      fontFamily: FONTS.body,
+      fontSize: 10,
+      color: COLORS.textDim,
+      letterSpacing: 3,
+      marginBottom: SPACING.sm,
+   },
+
+   // Koota breakdown card
+   kootaCard: {
+      backgroundColor: COLORS.bgCard,
+      borderRadius: RADIUS.xl,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+      marginBottom: SPACING.xl,
+      overflow: "hidden",
+   },
+   kootaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACING.sm,
+      paddingHorizontal: SPACING.md,
+      paddingVertical: 10,
+   },
+   kootaRowBorder: {
+      borderBottomWidth: 1,
+      borderBottomColor: COLORS.border,
+   },
+   kootaEmoji: { fontSize: 16, width: 22 },
+   kootaTopRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 5,
+   },
+   kootaName: {
+      fontFamily: FONTS.bodyMedium,
+      fontSize: 13,
+      color: COLORS.textPrimary,
+   },
+   kootaScore: {
+      fontFamily: FONTS.bodyBold,
+      fontSize: 13,
+      color: COLORS.textSecondary,
+   },
+   kootaBarTrack: {
+      height: 4,
+      backgroundColor: COLORS.border,
+      borderRadius: 2,
+      overflow: "hidden",
+   },
+   kootaBarFill: { height: 4, borderRadius: 2 },
+
+   // Doshas
+   doshaCard: {
+      backgroundColor: COLORS.bgCard,
+      borderRadius: RADIUS.xl,
+      borderWidth: 1,
+      borderColor: "#FF980040",
+      marginBottom: SPACING.xl,
+      overflow: "hidden",
+   },
+   doshaRow: {
+      flexDirection: "row",
+      gap: SPACING.sm,
+      padding: SPACING.md,
+   },
+   doshaRowBorder: {
+      borderBottomWidth: 1,
+      borderBottomColor: COLORS.border,
+   },
+   doshaBadge: { paddingTop: 2 },
+   doshaBadgeText: { fontSize: 16 },
+   doshaName: {
+      fontFamily: FONTS.bodyMedium,
+      fontSize: 13,
+      color: COLORS.textPrimary,
+      marginBottom: 2,
+   },
+   doshaDesc: {
+      fontFamily: FONTS.body,
+      fontSize: 12,
+      color: COLORS.textSecondary,
+      lineHeight: 18,
+   },
+   doshaCancelled: {
+      fontFamily: FONTS.body,
+      fontSize: 11,
+      color: "#4CAF50",
+      marginTop: 4,
+   },
+
+   // Highlights / strengths
+   highlightsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: SPACING.sm,
+      marginBottom: SPACING.xl,
+   },
+   strengthChip: {
+      flex: 1,
+      minWidth: "44%",
+      backgroundColor: COLORS.bgCard,
+      borderRadius: RADIUS.lg,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+      padding: SPACING.md,
+      alignItems: "center",
+   },
+   strengthScore: {
+      fontFamily: FONTS.headingBold,
+      fontSize: 18,
+      color: COLORS.textSecondary,
+      marginBottom: 2,
+   },
+   strengthName: {
+      fontFamily: FONTS.body,
+      fontSize: 11,
+      color: COLORS.textDim,
+   },
+
+   // Footer
+   footer: {
+      padding: SPACING.xl,
+      paddingBottom: 40,
+      borderTopWidth: 1,
+      borderTopColor: COLORS.border,
+   },
+   closeBtn: {
+      borderWidth: 1,
+      borderColor: COLORS.border,
+      borderRadius: RADIUS.lg,
+      paddingVertical: SPACING.md,
+      alignItems: "center",
+   },
+   closeBtnText: {
+      fontFamily: FONTS.bodyMedium,
+      fontSize: 15,
+      color: COLORS.textSecondary,
    },
 });

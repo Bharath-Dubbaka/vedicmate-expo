@@ -62,7 +62,7 @@ export default function ProfileOnboardingScreen() {
             preferences: {
                minAge: parseInt(minAge) || 18,
                maxAge: parseInt(maxAge) || 45,
-               minGunaScore: parseInt(minGuna) || 18,
+               minGunaScore: parseInt(minGuna) ?? 18,
                genderPref,
             },
          };
@@ -228,7 +228,7 @@ export default function ProfileOnboardingScreen() {
             </Text>
             <View style={styles.chipRow}>
                {[
-                  { val: "0", label: "Any" },
+                  { val: "1", label: "Any" },
                   { val: "18", label: "18+" },
                   { val: "24", label: "24+" },
                   { val: "28", label: "28+" },

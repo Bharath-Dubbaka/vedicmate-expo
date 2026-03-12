@@ -1,10 +1,10 @@
 // store/slices/chatSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { createSelector } from "@reduxjs/toolkit";
 import { chatAPI } from "../../services/api";
 
 const initialState = {
    // messages is a map: { [matchId]: [...messages] }
-   // This way we cache messages for multiple chats
    messagesByMatch: {},
    loadingByMatch: {},
    currentMatchId: null,
@@ -32,13 +32,12 @@ const chatSlice = createSlice({
    name: "chat",
    initialState,
    reducers: {
-      // Add a single message (from socket or sent by user)
       addMessage: (state, action) => {
          const { matchId, message } = action.payload;
          if (!state.messagesByMatch[matchId]) {
             state.messagesByMatch[matchId] = [];
          }
-         // Avoid duplicates (check by _id)
+         // Avoid duplicates (check by _id or tempId)
          const exists = state.messagesByMatch[matchId].some(
             (m) => m._id === message._id || m._id === message.tempId,
          );
@@ -77,9 +76,45 @@ const chatSlice = createSlice({
 
 export const { addMessage, setCurrentMatch, clearChat } = chatSlice.actions;
 
-export const selectMessages = (matchId) => (state) =>
-   state.chat.messagesByMatch[matchId] || [];
-export const selectChatLoading = (matchId) => (state) =>
-   state.chat.loadingByMatch[matchId] || false;
+// ─────────────────────────────────────────────────────────────────────────────
+// MEMOIZED SELECTORS
+// Using createSelector so the selector factory doesn't return a new function
+// reference on every render (which caused the "Selector unknown returned a
+// different result" warning in react-redux).
+//
+// Usage in component:
+//   const messages = useSelector(selectMessagesByMatchId(matchId));
+//   const loading  = useSelector(selectChatLoadingByMatchId(matchId));
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Cache the last-created selector per matchId so React-Redux can detect
+// that the same selector instance is being passed across renders.
+const messagesSelectorCache = {};
+const loadingSelectorCache = {};
+
+export const selectMessagesByMatchId = (matchId) => {
+   if (!messagesSelectorCache[matchId]) {
+      messagesSelectorCache[matchId] = createSelector(
+         (state) => state.chat.messagesByMatch[matchId],
+         (messages) => messages ?? [],
+      );
+   }
+   return messagesSelectorCache[matchId];
+};
+
+export const selectChatLoadingByMatchId = (matchId) => {
+   if (!loadingSelectorCache[matchId]) {
+      loadingSelectorCache[matchId] = createSelector(
+         (state) => state.chat.loadingByMatch[matchId],
+         (loading) => loading ?? false,
+      );
+   }
+   return loadingSelectorCache[matchId];
+};
+
+// Keep old names as aliases so existing imports don't break
+// (just replace the implementation — no need to hunt down every usage)
+export const selectMessages = selectMessagesByMatchId;
+export const selectChatLoading = selectChatLoadingByMatchId;
 
 export default chatSlice.reducer;
