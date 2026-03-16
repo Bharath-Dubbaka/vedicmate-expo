@@ -94,6 +94,11 @@ export const matchingAPI = {
    like: (userId) => api.post(`/matching/like/${userId}`),
    pass: (userId) => api.post(`/matching/pass/${userId}`),
    getMatches: () => api.get("/matching/matches"),
+   recordView: (userId) => api.post(`/matching/view/${userId}`),
+   getViewedMe: () => api.get("/matching/viewed-me"),
+   getViewedByMe: () => api.get("/matching/viewed-by-me"),
+   getLikedByMe: () => api.get("/matching/liked-by-me"),
+   getLikedMe: () => api.get("/matching/liked-me"),
    unmatch: (matchId) => api.delete(`/matching/unmatch/${matchId}`),
 };
 

@@ -27,6 +27,7 @@ import { logout, updateUser, selectUser } from "../../store/slices/authSlice";
 import { disconnectSocket } from "../../services/socket";
 import { onboardingAPI, authAPI } from "../../services/api";
 import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
+import { Switch } from "react-native";
 
 // ── Cosmic config ────────────────────────────────────────────────────────────
 const GANA_CONFIG = {
@@ -378,6 +379,9 @@ export default function ProfileScreen() {
    const user = useSelector(selectUser);
    const [loggingOut, setLoggingOut] = useState(false);
    const [editPrefs, setEditPrefs] = useState(false);
+   const [notifMatch, setNotifMatch] = useState(true);
+   const [notifMessage, setNotifMessage] = useState(true);
+   const [notifLiked, setNotifLiked] = useState(true);
 
    const kundli = user?.kundli;
    const gc = kundli ? GANA_CONFIG[kundli.gana] || GANA_CONFIG.Manushya : null;
@@ -596,16 +600,109 @@ export default function ProfileScreen() {
                </View>
             )}
 
-            {/* ── Sign Out ── */}
-            <TouchableOpacity
-               style={s.logoutBtn}
-               onPress={handleLogout}
-               disabled={loggingOut}
+            {/* ── Notifications ── */}
+            <View style={s.card}>
+               <Text style={s.cardLabel}>NOTIFICATIONS</Text>
+               {[
+                  {
+                     label: "New matches",
+                     sub: "Alert on mutual match",
+                     val: notifMatch,
+                     set: setNotifMatch,
+                  },
+                  {
+                     label: "New messages",
+                     sub: "Alert when a match messages",
+                     val: notifMessage,
+                     set: setNotifMessage,
+                  },
+                  {
+                     label: "Likes",
+                     sub: "Alert when someone likes you",
+                     val: notifLiked,
+                     set: setNotifLiked,
+                  },
+               ].map((row) => (
+                  <View key={row.label} style={s.prefRow}>
+                     <View style={{ flex: 1 }}>
+                        <Text style={s.prefLabel}>{row.label}</Text>
+                        <Text
+                           style={[
+                              s.prefLabel,
+                              {
+                                 fontSize: 11,
+                                 color: COLORS.textDim,
+                                 marginTop: 1,
+                              },
+                           ]}
+                        >
+                           {row.sub}
+                        </Text>
+                     </View>
+                     <Switch
+                        value={row.val}
+                        onValueChange={row.set}
+                        trackColor={{ false: COLORS.border, true: COLORS.gold }}
+                        thumbColor="#fff"
+                     />
+                  </View>
+               ))}
+            </View>
+
+            {/* ── Account Actions ── */}
+            <View style={s.card}>
+               <Text style={s.cardLabel}>ACCOUNT</Text>
+               <TouchableOpacity
+                  style={s.prefRow}
+                  onPress={handleLogout}
+                  disabled={loggingOut}
+               >
+                  <Text style={[s.prefLabel, { color: COLORS.rose }]}>
+                     {loggingOut ? "Signing out..." : "Sign Out"}
+                  </Text>
+                  <Text style={{ color: COLORS.rose, fontSize: 18 }}>›</Text>
+               </TouchableOpacity>
+               <TouchableOpacity
+                  style={s.prefRow}
+                  onPress={() =>
+                     Alert.alert(
+                        "Delete Account",
+                        "Not yet available. Contact support.",
+                     )
+                  }
+               >
+                  <View style={{ flex: 1 }}>
+                     <Text style={[s.prefLabel, { color: COLORS.rose }]}>
+                        Delete Account
+                     </Text>
+                     <Text
+                        style={[
+                           s.prefLabel,
+                           {
+                              fontSize: 11,
+                              color: COLORS.textDim,
+                              marginTop: 1,
+                           },
+                        ]}
+                     >
+                        This action is permanent
+                     </Text>
+                  </View>
+                  <Text style={{ color: COLORS.rose, fontSize: 18 }}>›</Text>
+               </TouchableOpacity>
+            </View>
+
+            <Text
+               style={{
+                  fontFamily: FONTS.body,
+                  fontSize: 11,
+                  color: COLORS.textDim,
+                  textAlign: "center",
+                  marginTop: 8,
+               }}
             >
-               <Text style={s.logoutText}>
-                  {loggingOut ? "Signing out..." : "Sign Out"}
-               </Text>
-            </TouchableOpacity>
+               VedicMate · Sprint 2
+            </Text>
 
             <View style={{ height: 48 }} />
          </ScrollView>

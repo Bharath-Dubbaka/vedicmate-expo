@@ -1,34 +1,44 @@
 {
-  "expo": {
-    "name": "VedicMate",
-    "slug": "vedicmate-expo",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "userInterfaceStyle": "dark",
-    "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0A0B14"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0A0B14"
+   "expo": {
+      "name": "VedicMate",
+      "slug": "vedicmatedbk369",
+      "version": "1.0.0",
+      "orientation": "portrait",
+      "userInterfaceStyle": "dark",
+      "icon": "./assets/icon.png",
+      "splash": {
+         "image": "./assets/splash.png",
+         "resizeMode": "contain",
+         "backgroundColor": "#0A0B14"
       },
-      "package": "com.vedicmate.app"
-    },
-    "plugins": [
-      [
-        "expo-router",
-        {
-          "root": "./app"
-        }
+      "android": {
+         "adaptiveIcon": {
+            "foregroundImage": "./assets/adaptive-icon.png",
+            "backgroundColor": "#0A0B14"
+         },
+         "package": "com.vedicmate.app",
+         "googleServicesFile": "./google-services.json"
+      },
+      "plugins": [
+         [
+            "expo-router",
+            {
+               "root": "./app"
+            }
+         ],
+         "expo-font",
+         "@react-native-community/datetimepicker",
+         "expo-web-browser"
       ],
-      "expo-font",
-      "@react-native-community/datetimepicker",
-      "expo-web-browser"
-    ],
-    "scheme": "vedicmate"
-  }
+      "scheme": "vedicmate",
+      "extra": {
+         "router": {
+            "root": "./app"
+         },
+         "eas": {
+            "projectId": "df1c5298-616f-44a5-a8c3-0a47288c195a"
+         }
+      },
+      "owner": "bratthegreat"
+   }
 }

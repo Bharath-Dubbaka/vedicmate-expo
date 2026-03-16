@@ -1,19 +1,14 @@
 // app/_layout.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// ROOT LAYOUT — The top-level component of the entire app
-//
-// React.js vs React Native:
-//   - React.js: index.js wraps <App /> with <Provider store={store}>
-//   - React Native (Expo Router): _layout.jsx IS the root — wrap it here
-//
-// Expo Router uses FILE-BASED ROUTING (like Next.js):
-//   - app/_layout.jsx     → root layout (this file) — wraps everything
-//   - app/(auth)/         → group, maps to "auth" screen group
-//   - app/(tabs)/         → group, maps to bottom tabs
-//   - Parentheses = "route groups" — they don't appear in the URL/path
+// SPRINT 2 UPDATE:
+//   - Push notification registration after auth init
+//   - Foreground notification listener (in-app toast via Alert)
+//   - Notification tap handler → navigate to correct screen
+//   - Badge clear on app foreground
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { Alert, AppState } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -35,81 +30,120 @@ import {
    Nunito_600SemiBold,
    Nunito_700Bold,
 } from "@expo-google-fonts/nunito";
+import {
+   registerForPushNotifications,
+   subscribeToForegroundNotifications,
+   subscribeToNotificationResponse,
+   getInitialNotification,
+   clearBadgeCount,
+} from "../services/notifications";
 
-// Prevent splash screen from auto-hiding until fonts + auth are ready
 SplashScreen.preventAutoHideAsync();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NAVIGATION GUARD
-// Watches auth state and redirects to the right screen
-//
-// React.js vs React Native:
-//   - React.js: you'd use React Router's <Navigate /> or useNavigate()
-//   - Expo Router: use router.replace() — same concept, different API
-//   - router.replace() = replace current route (no back button) — like window.location.replace
-//   - router.push() = add to stack (back button available) — like window.location.href
+// NAVIGATION GUARD — same logic as Sprint 1, unchanged
 // ─────────────────────────────────────────────────────────────────────────────
 function NavigationGuard() {
    const router = useRouter();
-   const segments = useSegments(); // current route segments, e.g. ["(tabs)", "discover"]
-
-   // useSelector = read from Redux store (same API as React.js!)
+   const segments = useSegments();
    const token = useSelector(selectToken);
    const loading = useSelector(selectIsLoading);
    const onboardingComplete = useSelector(selectOnboardingComplete);
 
    useEffect(() => {
-      // Don't redirect while we're still loading from AsyncStorage
-      if (loading) {
-         console.log("[NAV GUARD] Still loading auth state, waiting...");
-         return;
-      }
+      if (loading) return;
 
       const inAuth = segments[0] === "(auth)";
       const inOnboarding = segments[0] === "(onboarding)";
       const inTabs = segments[0] === "(tabs)";
 
-      console.log(
-         `[NAV GUARD] token=${!!token}, onboarding=${onboardingComplete}, segment=${segments[0]}`,
-      );
-
       if (!token) {
-         // Not logged in → auth screens
-         if (!inAuth) {
-            console.log("[NAV GUARD] No token → redirecting to auth");
-            router.replace("/(auth)");
-         }
+         if (!inAuth) router.replace("/(auth)");
       } else if (!onboardingComplete) {
-         // Logged in but hasn't completed onboarding → birth details
-         if (!inOnboarding) {
-            console.log(
-               "[NAV GUARD] Onboarding incomplete → redirecting to birth-details",
-            );
-            router.replace("/(onboarding)/birth-details");
-         }
+         if (!inOnboarding) router.replace("/(onboarding)/birth-details");
       } else {
-         // Fully set up → main app
-         if (!inTabs) {
-            console.log("[NAV GUARD] All good → redirecting to discover tab");
-            router.replace("/(tabs)/discover");
-         }
+         if (!inTabs) router.replace("/(tabs)/discover");
       }
    }, [token, loading, onboardingComplete, segments]);
 
-   return null; // renders nothing — pure logic component
+   return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INNER APP — rendered inside Redux Provider
-// We split this out because hooks (useDispatch, useSelector) must be inside Provider
+// PUSH NOTIFICATION HANDLER — listens for taps and routes appropriately
+// ─────────────────────────────────────────────────────────────────────────────
+function PushNotificationHandler() {
+   const router = useRouter();
+   const token = useSelector(selectToken);
+
+   // Handle notification tap → navigate
+   const handleNotificationData = (data) => {
+      if (!data || !token) return;
+
+      console.log("[PUSH HANDLER] Handling notification tap:", data);
+
+      // data.type set by backend when sending push
+      if (data.type === "match" && data.matchId) {
+         // New match → go to matches tab
+         router.push("/(tabs)/matches");
+      } else if (data.type === "message" && data.matchId) {
+         // New message → go directly to chat
+         router.push(`/(tabs)/chat/${data.matchId}`);
+      } else if (data.type === "liked") {
+         // Someone liked you → go to swipe history
+         router.push("/(tabs)/swipe-history");
+      }
+   };
+
+   useEffect(() => {
+      if (!token) return;
+
+      // Check if app was opened by tapping a notification (cold start)
+      getInitialNotification().then((data) => {
+         if (data && Object.keys(data).length > 0) {
+            console.log("[PUSH HANDLER] Cold start notification:", data);
+            // Small delay to let navigation settle after auth
+            setTimeout(() => handleNotificationData(data), 1000);
+         }
+      });
+
+      // Foreground notification: show an in-app Alert
+      // (system banner won't show when app is open on some OS versions)
+      const unsubForeground = subscribeToForegroundNotifications(
+         ({ title, body, data }) => {
+            Alert.alert(title || "VedicMate", body || "", [
+               { text: "Dismiss", style: "cancel" },
+               {
+                  text: "View",
+                  onPress: () => handleNotificationData(data),
+               },
+            ]);
+         },
+      );
+
+      // Background/killed tap handler
+      const unsubResponse = subscribeToNotificationResponse(
+         handleNotificationData,
+      );
+
+      return () => {
+         unsubForeground();
+         unsubResponse();
+      };
+   }, [token]);
+
+   return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INNER APP — inside Provider; handles fonts, auth init, push registration
 // ─────────────────────────────────────────────────────────────────────────────
 function InnerApp() {
    const dispatch = useDispatch();
    const loading = useSelector(selectIsLoading);
+   const token = useSelector(selectToken);
+   const appState = useRef(AppState.currentState);
 
-   // Load custom fonts
-   // React.js: you'd use @font-face in CSS
-   // React Native: fonts must be loaded via expo-font before use
    const [fontsLoaded] = useFonts({
       Cinzel_600SemiBold,
       Cinzel_700Bold,
@@ -118,13 +152,35 @@ function InnerApp() {
       Nunito_700Bold,
    });
 
-   // On app mount: check AsyncStorage for saved session
+   // On app mount: restore session from AsyncStorage
    useEffect(() => {
       console.log("[ROOT LAYOUT] App mounted — initializing auth...");
       dispatch(initAuth());
    }, []);
 
-   // Hide splash screen once fonts AND auth are ready
+   // Once auth is confirmed AND user is logged in → register for push
+   useEffect(() => {
+      if (!loading && token) {
+         console.log("[ROOT LAYOUT] Auth ready — registering for push...");
+         registerForPushNotifications();
+      }
+   }, [loading, token]);
+
+   // Clear badge count when app comes to foreground
+   useEffect(() => {
+      const sub = AppState.addEventListener("change", (nextState) => {
+         if (
+            appState.current.match(/inactive|background/) &&
+            nextState === "active"
+         ) {
+            clearBadgeCount();
+         }
+         appState.current = nextState;
+      });
+      return () => sub.remove();
+   }, []);
+
+   // Hide splash once fonts + auth are ready
    useEffect(() => {
       if (!loading && fontsLoaded) {
          console.log("[ROOT LAYOUT] Ready — hiding splash screen");
@@ -132,23 +188,13 @@ function InnerApp() {
       }
    }, [loading, fontsLoaded]);
 
-   // Keep splash visible while loading
-   if (loading || !fontsLoaded) {
-      return null;
-   }
+   if (loading || !fontsLoaded) return null;
 
    return (
       <>
          <StatusBar style="light" />
          <NavigationGuard />
-         {/*
-        Stack = a navigation stack (like a browser history stack)
-        React.js: Back button = browser back
-        React Native: Back button = Android hardware back / iOS swipe left
-        
-        screenOptions.animation="fade" = cross-fade between screens (no slide)
-        headerShown: false = we build our own headers
-      */}
+         <PushNotificationHandler />
          <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(onboarding)" />
@@ -159,12 +205,10 @@ function InnerApp() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ROOT EXPORT — wrap everything with Redux Provider
+// ROOT EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
 export default function RootLayout() {
    return (
-      // Provider makes the Redux store available to ALL child components
-      // Same as React.js — <Provider store={store}><App /></Provider>
       <Provider store={store}>
          <InnerApp />
       </Provider>

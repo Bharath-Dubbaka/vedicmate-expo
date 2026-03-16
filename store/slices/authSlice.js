@@ -25,6 +25,7 @@ const initialState = {
    loading: true, // true while checking AsyncStorage on app start
    authLoading: false, // true during login/register API call
    error: null, // error message string or null
+   pushToken: null, // Expo push token for notifications
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,6 +163,20 @@ export const logout = createAsyncThunk(
    },
 );
 
+// ADD savePushToken thunk
+export const savePushToken = createAsyncThunk(
+   "auth/savePushToken",
+   async (pushToken) => {
+      try {
+         await authAPI.savePushToken(pushToken);
+         return pushToken;
+      } catch (err) {
+         console.warn("[AUTH SLICE] savePushToken failed:", err.message);
+         return pushToken; // non-fatal — store locally even if backend failed
+      }
+   },
+);
+
 // ── UPDATE USER (local + AsyncStorage sync) ───────────────────────────────────
 // Used after onboarding steps to update user in both Redux state AND AsyncStorage
 export const updateUser = createAsyncThunk(
@@ -259,6 +274,10 @@ const authSlice = createSlice({
       builder.addCase(updateUser.fulfilled, (state, action) => {
          state.user = action.payload;
       });
+      //
+      builder.addCase(savePushToken.fulfilled, (state, action) => {
+         state.pushToken = action.payload;
+      });
    },
 });
 
@@ -276,5 +295,6 @@ export const selectAuthError = (state) => state.auth.error;
 export const selectIsLoggedIn = (state) => !!state.auth.token;
 export const selectOnboardingComplete = (state) =>
    state.auth.user?.onboardingComplete;
+export const selectPushToken = (state) => state.auth.pushToken; // ADD
 
 export default authSlice.reducer;

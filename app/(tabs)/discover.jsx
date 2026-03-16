@@ -26,6 +26,7 @@ import {
 } from "../../store/slices/discoverSlice";
 import { addMatch } from "../../store/slices/matchesSlice";
 import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
+import { matchingAPI } from "../../services/api";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width - SPACING.xl * 2;
@@ -561,6 +562,17 @@ export default function DiscoverScreen() {
          dispatch(fetchProfiles());
       }
    }, [profiles.length]);
+
+   // When a new card becomes visible, record the view
+   const recordedViews = useRef(new Set());
+
+   useEffect(() => {
+      const id = profiles[0]?.user?.id;
+      if (id && !recordedViews.current.has(id)) {
+         recordedViews.current.add(id);
+         matchingAPI.recordView(id).catch(() => {});
+      }
+   }, [profiles[0]?.user?.id]);
 
    const handleLike = useCallback(
       async (profile) => {
