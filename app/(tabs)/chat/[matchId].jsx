@@ -92,6 +92,12 @@ export default function ChatScreen() {
       return () => {
          console.log(`[CHAT] Cleanup for matchId: ${matchId}`);
          clearTimeout(typingTimeout.current);
+         // Remove socket listeners on unmount
+         if (socketRef.current) {
+            socketRef.current.off("message:new");
+            socketRef.current.off("typing:start");
+            socketRef.current.off("typing:stop");
+         }
       };
    }, [matchId]);
 

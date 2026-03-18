@@ -91,7 +91,7 @@ function PushNotificationHandler() {
          router.push(`/(tabs)/chat/${data.matchId}`);
       } else if (data.type === "liked") {
          // Someone liked you → go to swipe history
-         router.push("/(tabs)/swipe-history");
+         router.push("/(tabs)/matches");
       }
    };
 

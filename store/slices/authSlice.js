@@ -208,6 +208,11 @@ const authSlice = createSlice({
       clearError: (state) => {
          state.error = null;
       },
+      setAuth: (state, action) => {
+         state.token = action.payload.token;
+         state.user = action.payload.user;
+         state.authLoading = false;
+      },
    },
    extraReducers: (builder) => {
       // ── initAuth ──────────────────────────────────────────────────────────────
@@ -281,7 +286,7 @@ const authSlice = createSlice({
    },
 });
 
-export const { clearError } = authSlice.actions;
+export const { clearError, setAuth } = authSlice.actions;
 
 // ── SELECTORS ─────────────────────────────────────────────────────────────────
 // Selectors extract specific pieces of state

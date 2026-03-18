@@ -77,6 +77,7 @@ export const authAPI = {
    getMe: () => api.get("/auth/me"),
    savePushToken: (pushToken) => api.patch("/auth/push-token", { pushToken }),
    updateMe: (data) => api.patch("/auth/me", data), // ← bio + future fields
+   googleAuth: (data) => api.post("/auth/google", data),
 };
 
 // ── Onboarding ────────────────────────────────────────────────────────────────

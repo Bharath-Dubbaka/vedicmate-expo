@@ -1,25 +1,9 @@
 // app/(auth)/index.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTH SCREEN — Email/Password Login & Register
-//
-// React.js vs React Native — KEY DIFFERENCES IN THIS FILE:
-//
-// 1. No <div>, <p>, <input> — use <View>, <Text>, <TextInput>
-//    View = div (layout container)
-//    Text = p / span (all text MUST be inside <Text>)
-//    TextInput = input (no type="email" — use keyboardType prop instead)
-//
-// 2. No CSS files — use StyleSheet.create() at bottom of file
-//    Styles look like CSS but use camelCase: fontSize not font-size
-//    No cascading — styles don't inherit from parent (except Text color)
-//    Flexbox is THE layout system — no grid, no float
-//
-// 3. No onClick — use onPress (TouchableOpacity, Pressable)
-//
-// 4. No window.alert — use Alert.alert()
-//
-// 5. Animations: React Native has Animated API (not CSS transitions)
-//    We use Animated.Value and Animated.timing/spring
+// GOOGLE AUTH ADDITION:
+//   - Google Sign-In button using expo-auth-session
+//   - Calls POST /api/auth/google with the idToken
+//   - On success: saves token + user to AsyncStorage, dispatches to Redux
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useRef, useEffect } from "react";
@@ -37,19 +21,26 @@ import {
    ActivityIndicator,
    Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useDispatch, useSelector } from "react-redux";
+import { authAPI } from "../../services/api";
+import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
 import {
    login,
    register,
    clearError,
+   setAuth,
    selectAuthLoading,
    selectAuthError,
 } from "../../store/slices/authSlice";
-import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
+import {
+   GoogleSignin,
+   statusCodes,
+   isSuccessResponse,
+} from "@react-native-google-signin/google-signin";
 
 const { width, height } = Dimensions.get("window");
 
-// Generate random star positions once (not on every render)
 const STARS = Array.from({ length: 50 }, (_, i) => ({
    id: i,
    top: Math.random() * height,
@@ -63,27 +54,65 @@ export default function AuthScreen() {
    const authLoading = useSelector(selectAuthLoading);
    const authError = useSelector(selectAuthError);
 
-   // ── Local UI state ────────────────────────────────────────────────────────
-   const [mode, setMode] = useState("login"); // "login" | "register"
+   const [mode, setMode] = useState("login");
    const [name, setName] = useState("");
    const [email, setEmail] = useState("");
    const [password, setPassword] = useState("");
    const [showPassword, setShowPassword] = useState(false);
+   const [googleLoading, setGoogleLoading] = useState(false);
 
-   // ── Animation values ──────────────────────────────────────────────────────
-   // Animated.Value is like useState but drives CSS-like animations
+   useEffect(() => {
+      GoogleSignin.configure({
+         webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+      });
+   }, []);
+
+   const handleGoogleSignIn = async () => {
+      setGoogleLoading(true);
+      try {
+         // Sign out first to force account picker every time
+         await GoogleSignin.signOut();
+
+         await GoogleSignin.hasPlayServices();
+         const response = await GoogleSignin.signIn();
+         if (isSuccessResponse(response)) {
+            const googleUser = response.data.user;
+            const res = await authAPI.googleAuth({
+               googleId: googleUser.id,
+               email: googleUser.email,
+               name: googleUser.name,
+               avatar: googleUser.photo,
+            });
+            const { token, user } = res.data;
+            await AsyncStorage.setItem("token", token);
+            await AsyncStorage.setItem("user", JSON.stringify(user));
+            dispatch(setAuth({ token, user }));
+         }
+      } catch (error) {
+         if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+            console.log("[GOOGLE AUTH] Cancelled");
+         } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+            Alert.alert("Error", "Google Play Services not available.");
+         } else {
+            Alert.alert("Sign-In Failed", error.message || "Please try again.");
+         }
+      } finally {
+         setGoogleLoading(false);
+      }
+   };
+
+   // ── Animations ────────────────────────────────────────────────────────────
    const fadeAnim = useRef(new Animated.Value(0)).current;
    const slideAnim = useRef(new Animated.Value(40)).current;
    const glowAnim = useRef(new Animated.Value(0)).current;
    const formAnim = useRef(new Animated.Value(0)).current;
 
    useEffect(() => {
-      // Entrance animation — runs once on mount
       Animated.parallel([
          Animated.timing(fadeAnim, {
             toValue: 1,
             duration: 1000,
-            useNativeDriver: true, // run on UI thread (60fps), not JS thread
+            useNativeDriver: true,
          }),
          Animated.timing(slideAnim, {
             toValue: 0,
@@ -93,7 +122,6 @@ export default function AuthScreen() {
          }),
       ]).start();
 
-      // Continuous glow pulse
       Animated.loop(
          Animated.sequence([
             Animated.timing(glowAnim, {
@@ -109,7 +137,6 @@ export default function AuthScreen() {
          ]),
       ).start();
 
-      // Form fade in
       Animated.timing(formAnim, {
          toValue: 1,
          duration: 600,
@@ -118,7 +145,6 @@ export default function AuthScreen() {
       }).start();
    }, []);
 
-   // Clear error when switching modes
    useEffect(() => {
       dispatch(clearError());
       setName("");
@@ -130,11 +156,9 @@ export default function AuthScreen() {
       outputRange: [0.2, 0.5],
    });
 
-   // ── Submit handler ────────────────────────────────────────────────────────
    const handleSubmit = async () => {
       console.log(`[AUTH SCREEN] handleSubmit: mode=${mode}, email=${email}`);
 
-      // Client-side validation
       if (!email.trim() || !password.trim()) {
          Alert.alert("Missing Fields", "Please enter your email and password.");
          return;
@@ -152,39 +176,28 @@ export default function AuthScreen() {
             );
             return;
          }
-
-         // dispatch() returns a Promise with Redux Toolkit thunks
-         // We can unwrap() to get the actual value or throw on error
          const result = await dispatch(
             register({ name: name.trim(), email: email.trim(), password }),
          );
-
          if (register.rejected.match(result)) {
-            // Error is already set in authSlice state — shown below input
             console.log("[AUTH SCREEN] Register failed:", result.payload);
          }
       } else {
          const result = await dispatch(
             login({ email: email.trim(), password }),
          );
-
          if (login.rejected.match(result)) {
             console.log("[AUTH SCREEN] Login failed:", result.payload);
          }
       }
-      // On success: NavigationGuard in _layout.jsx detects token change and redirects
    };
 
    return (
-      // KeyboardAvoidingView pushes content up when keyboard opens
-      // React.js equivalent: nothing — browser handles this automatically
-      // behavior="padding" = add padding at bottom equal to keyboard height
       <KeyboardAvoidingView
          style={{ flex: 1 }}
          behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
          <View style={styles.container}>
-            {/* Stars background */}
             {STARS.map((star) => (
                <View
                   key={star.id}
@@ -201,16 +214,12 @@ export default function AuthScreen() {
                />
             ))}
 
-            {/* Glow effect */}
             <Animated.View style={[styles.glow, { opacity: glowOpacity }]} />
 
-            {/* ScrollView so form doesn't get cut off on small screens */}
             <ScrollView
                contentContainerStyle={styles.scrollContent}
                showsVerticalScrollIndicator={false}
                keyboardShouldPersistTaps="handled"
-               // keyboardShouldPersistTaps — without this, tapping outside keyboard
-               // dismisses it AND consumes the tap (buttons don't fire). "handled" fixes this.
             >
                {/* Logo + Title */}
                <Animated.View
@@ -229,7 +238,6 @@ export default function AuthScreen() {
                   <Text style={styles.tagline}>
                      Vedic compatibility, redefined
                   </Text>
-
                   <View style={styles.divider}>
                      <View style={styles.dividerLine} />
                      <Text style={styles.dividerText}>✦</Text>
@@ -239,6 +247,35 @@ export default function AuthScreen() {
 
                {/* Auth Form */}
                <Animated.View style={[styles.form, { opacity: formAnim }]}>
+                  {/* ── Google Sign-In Button ── */}
+                  <TouchableOpacity
+                     style={styles.googleBtn}
+                     onPress={handleGoogleSignIn}
+                     disabled={googleLoading}
+                     activeOpacity={0.85}
+                  >
+                     {googleLoading ? (
+                        <ActivityIndicator
+                           size="small"
+                           color={COLORS.textPrimary}
+                        />
+                     ) : (
+                        <>
+                           <Text style={styles.googleIcon}>G</Text>
+                           <Text style={styles.googleBtnText}>
+                              Continue with Google
+                           </Text>
+                        </>
+                     )}
+                  </TouchableOpacity>
+
+                  {/* Divider */}
+                  <View style={styles.orDivider}>
+                     <View style={styles.orLine} />
+                     <Text style={styles.orText}>or</Text>
+                     <View style={styles.orLine} />
+                  </View>
+
                   {/* Mode Toggle */}
                   <View style={styles.modeToggle}>
                      <TouchableOpacity
@@ -275,7 +312,6 @@ export default function AuthScreen() {
                      </TouchableOpacity>
                   </View>
 
-                  {/* Name field (register only) */}
                   {mode === "register" && (
                      <View style={styles.inputGroup}>
                         <Text style={styles.inputLabel}>FULL NAME</Text>
@@ -285,13 +321,12 @@ export default function AuthScreen() {
                            placeholderTextColor={COLORS.textDim}
                            value={name}
                            onChangeText={setName}
-                           autoCapitalize="words" // capitalize first letter of each word
-                           returnKeyType="next" // "next" shows ➡ on keyboard (vs "done")
+                           autoCapitalize="words"
+                           returnKeyType="next"
                         />
                      </View>
                   )}
 
-                  {/* Email */}
                   <View style={styles.inputGroup}>
                      <Text style={styles.inputLabel}>EMAIL</Text>
                      <TextInput
@@ -300,14 +335,13 @@ export default function AuthScreen() {
                         placeholderTextColor={COLORS.textDim}
                         value={email}
                         onChangeText={setEmail}
-                        keyboardType="email-address" // shows @ key on keyboard
-                        autoCapitalize="none" // don't auto-capitalize email
-                        autoCorrect={false} // don't autocorrect email
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
                         returnKeyType="next"
                      />
                   </View>
 
-                  {/* Password */}
                   <View style={styles.inputGroup}>
                      <Text style={styles.inputLabel}>PASSWORD</Text>
                      <View style={styles.passwordRow}>
@@ -321,9 +355,9 @@ export default function AuthScreen() {
                            placeholderTextColor={COLORS.textDim}
                            value={password}
                            onChangeText={setPassword}
-                           secureTextEntry={!showPassword} // toggles password dots
+                           secureTextEntry={!showPassword}
                            returnKeyType="done"
-                           onSubmitEditing={handleSubmit} // submit on keyboard "done"
+                           onSubmitEditing={handleSubmit}
                         />
                         <TouchableOpacity
                            style={styles.eyeBtn}
@@ -336,14 +370,12 @@ export default function AuthScreen() {
                      </View>
                   </View>
 
-                  {/* Error message from Redux state */}
                   {authError ? (
                      <View style={styles.errorBox}>
                         <Text style={styles.errorText}>⚠️ {authError}</Text>
                      </View>
                   ) : null}
 
-                  {/* Submit button */}
                   <TouchableOpacity
                      style={[
                         styles.submitBtn,
@@ -354,8 +386,6 @@ export default function AuthScreen() {
                      activeOpacity={0.85}
                   >
                      {authLoading ? (
-                        // ActivityIndicator = loading spinner
-                        // React.js: you'd use a CSS spinner or a library like react-spinners
                         <ActivityIndicator color={COLORS.bg} size="small" />
                      ) : (
                         <Text style={styles.submitBtnText}>
@@ -366,7 +396,6 @@ export default function AuthScreen() {
                      )}
                   </TouchableOpacity>
 
-                  {/* Nakshatra teaser pills */}
                   <View style={styles.pills}>
                      {[
                         "🐾 Yoni Match",
@@ -387,34 +416,16 @@ export default function AuthScreen() {
    );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STYLES
-// React.js: .className { font-size: 16px; background-color: #fff; }
-// React Native: StyleSheet.create({ name: { fontSize: 16, backgroundColor: "#fff" } })
-//
-// Key differences:
-// - Numbers for most values (no "px" units — RN uses logical pixels / dp)
-// - No shorthand: no "margin: 10 20" — use marginVertical/marginHorizontal
-// - No :hover, :focus — no CSS pseudo-selectors
-// - Flexbox by default (direction is column, not row)
-// ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-   container: {
-      flex: 1, // flex: 1 in RN = fill parent — like height: 100% + flex: 1 in CSS
-      backgroundColor: COLORS.bg,
-   },
+   container: { flex: 1, backgroundColor: COLORS.bg },
    scrollContent: {
-      flexGrow: 1, // like min-height: 100% in CSS
+      flexGrow: 1,
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: SPACING.xl,
       paddingVertical: SPACING.xxl,
    },
-   star: {
-      position: "absolute", // same as CSS position: absolute
-      borderRadius: 99,
-      backgroundColor: "#FFFFFF",
-   },
+   star: { position: "absolute", borderRadius: 99, backgroundColor: "#FFFFFF" },
    glow: {
       position: "absolute",
       width: 300,
@@ -422,13 +433,9 @@ const styles = StyleSheet.create({
       borderRadius: 150,
       backgroundColor: COLORS.gold,
       top: height * 0.2,
-      alignSelf: "center", // centering in RN — no margin: auto
+      alignSelf: "center",
    },
-   header: {
-      width: "100%",
-      alignItems: "center",
-      marginBottom: SPACING.xl,
-   },
+   header: { width: "100%", alignItems: "center", marginBottom: SPACING.xl },
    logoRing: {
       width: 96,
       height: 96,
@@ -455,11 +462,7 @@ const styles = StyleSheet.create({
       letterSpacing: 1,
       marginBottom: SPACING.lg,
    },
-   divider: {
-      flexDirection: "row", // row = horizontal (unlike CSS default which is already row)
-      alignItems: "center",
-      width: "60%",
-   },
+   divider: { flexDirection: "row", alignItems: "center", width: "60%" },
    dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
    dividerText: {
       color: COLORS.goldDim,
@@ -475,6 +478,43 @@ const styles = StyleSheet.create({
       padding: SPACING.lg,
       marginTop: SPACING.lg,
    },
+
+   // Google button
+   googleBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: SPACING.sm,
+      backgroundColor: COLORS.bgElevated,
+      borderRadius: RADIUS.lg,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+      paddingVertical: SPACING.md,
+      marginBottom: SPACING.md,
+   },
+   googleIcon: {
+      fontFamily: FONTS.bodyBold,
+      fontSize: 18,
+      color: "#4285F4",
+      width: 24,
+      textAlign: "center",
+   },
+   googleBtnText: {
+      fontFamily: FONTS.bodyMedium,
+      fontSize: 15,
+      color: COLORS.textPrimary,
+   },
+
+   // OR divider
+   orDivider: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: SPACING.md,
+      gap: SPACING.sm,
+   },
+   orLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
+   orText: { fontFamily: FONTS.body, fontSize: 12, color: COLORS.textDim },
+
    modeToggle: {
       flexDirection: "row",
       backgroundColor: COLORS.bgElevated,
@@ -488,20 +528,14 @@ const styles = StyleSheet.create({
       alignItems: "center",
       borderRadius: RADIUS.md,
    },
-   modeBtnActive: {
-      backgroundColor: COLORS.gold,
-   },
+   modeBtnActive: { backgroundColor: COLORS.gold },
    modeBtnText: {
       fontFamily: FONTS.bodyMedium,
       fontSize: 14,
       color: COLORS.textSecondary,
    },
-   modeBtnTextActive: {
-      color: COLORS.bg,
-   },
-   inputGroup: {
-      marginBottom: SPACING.md,
-   },
+   modeBtnTextActive: { color: COLORS.bg },
+   inputGroup: { marginBottom: SPACING.md },
    inputLabel: {
       fontFamily: FONTS.body,
       fontSize: 11,
@@ -519,16 +553,9 @@ const styles = StyleSheet.create({
       fontFamily: FONTS.body,
       fontSize: 16,
       color: COLORS.textPrimary,
-      // No outline! RN doesn't have focus outlines (use borderColor change with onFocus/onBlur)
    },
-   passwordRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.sm,
-   },
-   eyeBtn: {
-      padding: SPACING.sm,
-   },
+   passwordRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm },
+   eyeBtn: { padding: SPACING.sm },
    eyeIcon: { fontSize: 20 },
    errorBox: {
       backgroundColor: "rgba(232, 96, 122, 0.1)",
@@ -550,17 +577,13 @@ const styles = StyleSheet.create({
       paddingVertical: SPACING.md + 2,
       alignItems: "center",
       marginBottom: SPACING.lg,
-      // elevation = drop shadow on Android (no box-shadow in RN Android)
-      // shadowColor/Offset/Opacity/Radius = iOS shadow
       elevation: 8,
       shadowColor: COLORS.gold,
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
       shadowRadius: 8,
    },
-   submitBtnDisabled: {
-      opacity: 0.6,
-   },
+   submitBtnDisabled: { opacity: 0.6 },
    submitBtnText: {
       fontFamily: FONTS.bodyBold,
       fontSize: 16,

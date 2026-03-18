@@ -22,7 +22,8 @@ if (!IS_EXPO_GO) {
       const N = require("expo-notifications");
       N.setNotificationHandler({
          handleNotification: async () => ({
-            shouldShowAlert: true,
+            shouldShowBanner: true,
+            shouldShowList: true,
             shouldPlaySound: true,
             shouldSetBadge: true,
          }),
