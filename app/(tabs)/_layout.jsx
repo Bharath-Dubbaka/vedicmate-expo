@@ -1,17 +1,14 @@
-// app/(tabs)/_layout.jsx
+// Tab bar layout. Only Discover, Matches, and Profile are visible tabs.
+// All other screens in this folder (swipe-history, chat, paywall) are
+// hidden from the tab bar using href: null.
 
 import { Tabs } from "expo-router";
 import { Text } from "react-native";
 import { COLORS, FONTS } from "../../constants/theme";
 
-function TabIcon({ emoji, label, focused }) {
+function TabIcon({ emoji, focused }) {
    return (
-      <Text
-         style={{
-            fontSize: focused ? 22 : 20,
-            opacity: focused ? 1 : 0.5,
-         }}
-      >
+      <Text style={{ fontSize: focused ? 22 : 20, opacity: focused ? 1 : 0.5 }}>
          {emoji}
       </Text>
    );
@@ -43,7 +40,7 @@ export default function TabLayout() {
             options={{
                title: "Discover",
                tabBarIcon: ({ focused }) => (
-                  <TabIcon emoji="🔮" label="Discover" focused={focused} />
+                  <TabIcon emoji="🔮" focused={focused} />
                ),
             }}
          />
@@ -52,33 +49,24 @@ export default function TabLayout() {
             options={{
                title: "Matches",
                tabBarIcon: ({ focused }) => (
-                  <TabIcon emoji="✨" label="Matches" focused={focused} />
+                  <TabIcon emoji="✨" focused={focused} />
                ),
             }}
          />
-         {/* <Tabs.Screen
-            name="swipe-history"
-            options={{
-               tabBarIcon: ({ focused }) => (
-                  <TabIcon emoji="🕊" label="History" focused={focused} />
-               ),
-            }}
-         /> */}
          <Tabs.Screen
             name="profile"
             options={{
                title: "Profile",
                tabBarIcon: ({ focused }) => (
-                  <TabIcon emoji="👤" label="Profile" focused={focused} />
+                  <TabIcon emoji="👤" focused={focused} />
                ),
             }}
          />
-         <Tabs.Screen
-            name="chat/[matchId]"
-            options={{
-               href: null,
-            }}
-         />
+
+         {/* Hidden screens — not visible as tabs */}
+         <Tabs.Screen name="chat/[matchId]" options={{ href: null }} />
+         <Tabs.Screen name="swipe-history" options={{ href: null }} />
+         <Tabs.Screen name="paywall" options={{ href: null }} />
       </Tabs>
    );
 }

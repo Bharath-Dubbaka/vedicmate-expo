@@ -20,6 +20,7 @@ import authReducer from "./slices/authSlice";
 import discoverReducer from "./slices/discoverSlice";
 import matchesReducer from "./slices/matchesSlice";
 import chatReducer from "./slices/chatSlice";
+import premiumReducer from "./slices/premiumSlice";
 
 export const store = configureStore({
    reducer: {
@@ -27,6 +28,7 @@ export const store = configureStore({
       discover: discoverReducer, // swipe deck profiles
       matches: matchesReducer, // matched users list
       chat: chatReducer, // messages per match
+      premium: premiumReducer,
    },
    middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({

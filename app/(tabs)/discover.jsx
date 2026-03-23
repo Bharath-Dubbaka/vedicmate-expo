@@ -23,10 +23,14 @@ import {
    selectProfiles,
    selectDiscoverLoading,
    selectIsEmpty,
+   selectSwipeLimitReached,
+   resetSwipeLimit,
 } from "../../store/slices/discoverSlice";
 import { addMatch } from "../../store/slices/matchesSlice";
 import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
 import { matchingAPI } from "../../services/api";
+import { usePremium } from "../hooks/usePremium";
+import PaywallModal from "./paywall";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width - SPACING.xl * 2;
@@ -550,18 +554,36 @@ export default function DiscoverScreen() {
    const profiles = useSelector(selectProfiles);
    const loading = useSelector(selectDiscoverLoading);
    const isEmpty = useSelector(selectIsEmpty);
-
+   const swipeLimitReached = useSelector(selectSwipeLimitReached);
+   const [showPaywall, setShowPaywall] = useState(false);
+   const {
+      isPremium,
+      swipesRemaining,
+      swipesAllowed,
+      decrementSwipe,
+      refresh,
+   } = usePremium();
    const [reportProfile, setReportProfile] = useState(null);
 
    useEffect(() => {
       dispatch(fetchProfiles());
    }, []);
 
+   //This stops refetching when server confirmed 0 results.
+   //Users swipe through all 10, deck empties, one fetch happens, new batch loads. Clean.
    useEffect(() => {
-      if (!loading && profiles.length <= 2 && profiles.length > 0) {
+      if (!loading && !isEmpty && profiles.length === 0) {
          dispatch(fetchProfiles());
       }
-   }, [profiles.length]);
+      //stops premature refetch
+   }, [profiles.length, loading, isEmpty]);
+
+   useEffect(() => {
+      if (swipeLimitReached) {
+         setShowPaywall(true);
+         dispatch(resetSwipeLimit());
+      }
+   }, [swipeLimitReached]);
 
    // When a new card becomes visible, record the view
    const recordedViews = useRef(new Set());
@@ -576,6 +598,11 @@ export default function DiscoverScreen() {
 
    const handleLike = useCallback(
       async (profile) => {
+         if (!swipesAllowed && !isPremium) {
+            setShowPaywall(true);
+            return;
+         }
+         decrementSwipe();
          dispatch(removeProfile(profile.user.id));
          const result = await dispatch(likeProfile(profile.user.id));
 
@@ -605,15 +632,20 @@ export default function DiscoverScreen() {
             );
          }
       },
-      [dispatch],
+      [dispatch, swipesAllowed, isPremium, decrementSwipe],
    );
 
    const handlePass = useCallback(
       (profile) => {
+         if (!swipesAllowed && !isPremium) {
+            setShowPaywall(true);
+            return;
+         }
+         decrementSwipe();
          dispatch(removeProfile(profile.user.id));
          dispatch(passProfile(profile.user.id));
       },
-      [dispatch],
+      [dispatch, swipesAllowed, isPremium, decrementSwipe],
    );
 
    const visibleProfiles = profiles.slice(0, 3);
@@ -698,6 +730,14 @@ export default function DiscoverScreen() {
             visible={!!reportProfile}
             profile={reportProfile}
             onClose={() => setReportProfile(null)}
+         />
+         <PaywallModal
+            visible={showPaywall}
+            onClose={() => {
+               setShowPaywall(false);
+               refresh();
+            }}
+            triggerReason="swipe_limit"
          />
       </View>
    );

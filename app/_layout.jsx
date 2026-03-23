@@ -1,11 +1,7 @@
 // app/_layout.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// SPRINT 2 UPDATE:
-//   - Push notification registration after auth init
-//   - Foreground notification listener (in-app toast via Alert)
-//   - Notification tap handler → navigate to correct screen
-//   - Badge clear on app foreground
-// ─────────────────────────────────────────────────────────────────────────────
+//
+// Root layout. Handles fonts, auth session restore, push notifications,
+// and RevenueCat initialization — but only after login is confirmed.
 
 import { useEffect, useRef } from "react";
 import { Alert, AppState } from "react-native";
@@ -19,6 +15,7 @@ import {
    selectToken,
    selectIsLoading,
    selectOnboardingComplete,
+   selectUser,
 } from "../store/slices/authSlice";
 import {
    useFonts,
@@ -37,12 +34,11 @@ import {
    getInitialNotification,
    clearBadgeCount,
 } from "../services/notifications";
+import { fetchPremiumStatus, resetPremium } from "../store/slices/premiumSlice";
 
 SplashScreen.preventAutoHideAsync();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NAVIGATION GUARD — same logic as Sprint 1, unchanged
-// ─────────────────────────────────────────────────────────────────────────────
+// Redirects the user to the correct screen based on auth + onboarding state
 function NavigationGuard() {
    const router = useRouter();
    const segments = useSegments();
@@ -69,9 +65,7 @@ function NavigationGuard() {
    return null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUSH NOTIFICATION HANDLER — listens for taps and routes appropriately
-// ─────────────────────────────────────────────────────────────────────────────
+// Handles notification taps and routes to the correct screen
 function PushNotificationHandler() {
    const router = useRouter();
    const token = useSelector(selectToken);
@@ -113,10 +107,7 @@ function PushNotificationHandler() {
          ({ title, body, data }) => {
             Alert.alert(title || "VedicMate", body || "", [
                { text: "Dismiss", style: "cancel" },
-               {
-                  text: "View",
-                  onPress: () => handleNotificationData(data),
-               },
+               { text: "View", onPress: () => handleNotificationData(data) },
             ]);
          },
       );
@@ -135,9 +126,30 @@ function PushNotificationHandler() {
    return null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// INNER APP — inside Provider; handles fonts, auth init, push registration
-// ─────────────────────────────────────────────────────────────────────────────
+// Initializes RevenueCat and fetches premium status only after login.
+// Separated into its own component so it re-renders when token changes.
+function PremiumInit() {
+   const dispatch = useDispatch();
+   const token = useSelector(selectToken);
+   const prevTokenRef = useRef(null);
+
+   useEffect(() => {
+      const wasLoggedIn = !!prevTokenRef.current;
+      const isNowLoggedIn = !!token;
+      prevTokenRef.current = token;
+
+      if (isNowLoggedIn && !wasLoggedIn) {
+         dispatch(fetchPremiumStatus());
+      } else if (!isNowLoggedIn && wasLoggedIn) {
+         dispatch(resetPremium());
+      }
+   }, [token]);
+
+   return null;
+}
+
+
+// Core app setup: fonts, auth restore, push registration, badge clearing
 function InnerApp() {
    const dispatch = useDispatch();
    const loading = useSelector(selectIsLoading);
@@ -152,13 +164,13 @@ function InnerApp() {
       Nunito_700Bold,
    });
 
-   // On app mount: restore session from AsyncStorage
+   // Restore session from AsyncStorage on app launch
    useEffect(() => {
       console.log("[ROOT LAYOUT] App mounted — initializing auth...");
       dispatch(initAuth());
    }, []);
 
-   // Once auth is confirmed AND user is logged in → register for push
+   // Register for push notifications after auth is confirmed
    useEffect(() => {
       if (!loading && token) {
          console.log("[ROOT LAYOUT] Auth ready — registering for push...");
@@ -166,7 +178,7 @@ function InnerApp() {
       }
    }, [loading, token]);
 
-   // Clear badge count when app comes to foreground
+   // Clear notification badge count when app comes to foreground
    useEffect(() => {
       const sub = AppState.addEventListener("change", (nextState) => {
          if (
@@ -180,7 +192,7 @@ function InnerApp() {
       return () => sub.remove();
    }, []);
 
-   // Hide splash once fonts + auth are ready
+   // Hide splash screen once fonts and auth check are both complete
    useEffect(() => {
       if (!loading && fontsLoaded) {
          console.log("[ROOT LAYOUT] Ready — hiding splash screen");
@@ -195,6 +207,7 @@ function InnerApp() {
          <StatusBar style="light" />
          <NavigationGuard />
          <PushNotificationHandler />
+         <PremiumInit />
          <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(onboarding)" />

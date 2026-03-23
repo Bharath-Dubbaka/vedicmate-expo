@@ -11,6 +11,7 @@ const initialState = {
    loading: false,
    error: null,
    isEmpty: false, // true when server returns 0 profiles
+   swipeLimitReached: false,
 };
 
 // ── Fetch profiles for discover deck ─────────────────────────────────────────
@@ -50,8 +51,9 @@ export const likeProfile = createAsyncThunk(
          return { userId, ...res.data };
       } catch (err) {
          const message = err.response?.data?.message || err.message;
+         const isSwipeLimit = err.response?.status === 429;
          console.error("[DISCOVER SLICE] likeProfile error:", message);
-         return rejectWithValue(message);
+         return rejectWithValue({ message, isSwipeLimit });
       }
    },
 );
@@ -63,11 +65,13 @@ export const passProfile = createAsyncThunk(
       try {
          console.log(`[DISCOVER SLICE] passProfile: passing userId: ${userId}`);
          await matchingAPI.pass(userId);
+
          return userId;
       } catch (err) {
          const message = err.response?.data?.message || err.message;
+         const isSwipeLimit = err.response?.status === 429;
          console.error("[DISCOVER SLICE] passProfile error:", message);
-         return rejectWithValue(message);
+         return rejectWithValue({ message, isSwipeLimit });
       }
    },
 );
@@ -87,6 +91,9 @@ const discoverSlice = createSlice({
       },
       clearError: (state) => {
          state.error = null;
+      },
+      resetSwipeLimit: (state) => {
+         state.swipeLimitReached = false;
       },
    },
    extraReducers: (builder) => {
@@ -110,25 +117,26 @@ const discoverSlice = createSlice({
       // We just handle the fulfilled/rejected states
       builder
          .addCase(likeProfile.rejected, (state, action) => {
-            console.error(
-               "[DISCOVER SLICE] likeProfile rejected:",
-               action.payload,
-            );
+            if (action.payload?.isSwipeLimit) {
+               state.swipeLimitReached = true;
+            }
          })
          .addCase(passProfile.rejected, (state, action) => {
-            console.error(
-               "[DISCOVER SLICE] passProfile rejected:",
-               action.payload,
-            );
+            if (action.payload?.isSwipeLimit) {
+               state.swipeLimitReached = true;
+            }
          });
    },
 });
 
-export const { removeProfile, clearError } = discoverSlice.actions;
+export const { removeProfile, clearError, resetSwipeLimit } =
+   discoverSlice.actions;
 
 export const selectProfiles = (state) => state.discover.profiles;
 export const selectDiscoverLoading = (state) => state.discover.loading;
 export const selectDiscoverError = (state) => state.discover.error;
 export const selectIsEmpty = (state) => state.discover.isEmpty;
+export const selectSwipeLimitReached = (state) =>
+   state.discover.swipeLimitReached;
 
 export default discoverSlice.reducer;

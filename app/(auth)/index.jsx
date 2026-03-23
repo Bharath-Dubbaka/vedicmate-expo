@@ -1,10 +1,7 @@
 // app/(auth)/index.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// GOOGLE AUTH ADDITION:
-//   - Google Sign-In button using expo-auth-session
-//   - Calls POST /api/auth/google with the idToken
-//   - On success: saves token + user to AsyncStorage, dispatches to Redux
-// ─────────────────────────────────────────────────────────────────────────────
+//
+// Auth screen — email/password login + Google Sign-In.
+// Google Sign-In requires a native dev build and is safely disabled in Expo Go.
 
 import { useState, useRef, useEffect } from "react";
 import {
@@ -33,11 +30,23 @@ import {
    selectAuthLoading,
    selectAuthError,
 } from "../../store/slices/authSlice";
-import {
-   GoogleSignin,
-   statusCodes,
-   isSuccessResponse,
-} from "@react-native-google-signin/google-signin";
+
+// Safely try to import Google Sign-In — only works in a native dev build.
+// In Expo Go this import crashes the app, so we guard it.
+let GoogleSignin = null;
+let statusCodes = null;
+let isSuccessResponse = null;
+let googleSignInAvailable = false;
+
+try {
+   const googleSignIn = require("@react-native-google-signin/google-signin");
+   GoogleSignin = googleSignIn.GoogleSignin;
+   statusCodes = googleSignIn.statusCodes;
+   isSuccessResponse = googleSignIn.isSuccessResponse;
+   googleSignInAvailable = true;
+} catch {
+   // Native module not available in Expo Go — Google Sign-In button will be hidden
+}
 
 const { width, height } = Dimensions.get("window");
 
@@ -62,19 +71,29 @@ export default function AuthScreen() {
    const [googleLoading, setGoogleLoading] = useState(false);
 
    useEffect(() => {
-      GoogleSignin.configure({
-         webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-      });
+      if (googleSignInAvailable && GoogleSignin) {
+         GoogleSignin.configure({
+            webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+         });
+      }
    }, []);
 
    const handleGoogleSignIn = async () => {
+      if (!googleSignInAvailable || !GoogleSignin) {
+         Alert.alert(
+            "Not Available in Expo Go",
+            "Google Sign-In requires a development build. Use email/password to log in for now.",
+         );
+         return;
+      }
+
       setGoogleLoading(true);
       try {
          // Sign out first to force account picker every time
          await GoogleSignin.signOut();
-
          await GoogleSignin.hasPlayServices();
          const response = await GoogleSignin.signIn();
+
          if (isSuccessResponse(response)) {
             const googleUser = response.data.user;
             const res = await authAPI.googleAuth({
@@ -89,9 +108,9 @@ export default function AuthScreen() {
             dispatch(setAuth({ token, user }));
          }
       } catch (error) {
-         if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-            console.log("[GOOGLE AUTH] Cancelled");
-         } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+         if (error.code === statusCodes?.SIGN_IN_CANCELLED) {
+            // User cancelled — do nothing
+         } else if (error.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
             Alert.alert("Error", "Google Play Services not available.");
          } else {
             Alert.alert("Sign-In Failed", error.message || "Please try again.");
@@ -101,7 +120,7 @@ export default function AuthScreen() {
       }
    };
 
-   // ── Animations ────────────────────────────────────────────────────────────
+   // Animations
    const fadeAnim = useRef(new Animated.Value(0)).current;
    const slideAnim = useRef(new Animated.Value(40)).current;
    const glowAnim = useRef(new Animated.Value(0)).current;
@@ -180,14 +199,14 @@ export default function AuthScreen() {
             register({ name: name.trim(), email: email.trim(), password }),
          );
          if (register.rejected.match(result)) {
-            console.log("[AUTH SCREEN] Register failed:", result.payload);
+            console.log("[Auth] Register failed:", result.payload);
          }
       } else {
          const result = await dispatch(
             login({ email: email.trim(), password }),
          );
          if (login.rejected.match(result)) {
-            console.log("[AUTH SCREEN] Login failed:", result.payload);
+            console.log("[Auth] Login failed:", result.payload);
          }
       }
    };
@@ -247,29 +266,38 @@ export default function AuthScreen() {
 
                {/* Auth Form */}
                <Animated.View style={[styles.form, { opacity: formAnim }]}>
-                  {/* ── Google Sign-In Button ── */}
-                  <TouchableOpacity
-                     style={styles.googleBtn}
-                     onPress={handleGoogleSignIn}
-                     disabled={googleLoading}
-                     activeOpacity={0.85}
-                  >
-                     {googleLoading ? (
-                        <ActivityIndicator
-                           size="small"
-                           color={COLORS.textPrimary}
-                        />
-                     ) : (
-                        <>
-                           <Text style={styles.googleIcon}>G</Text>
-                           <Text style={styles.googleBtnText}>
-                              Continue with Google
-                           </Text>
-                        </>
-                     )}
-                  </TouchableOpacity>
+                  {/* Google Sign-In — only shown when available (dev build) */}
+                  {googleSignInAvailable ? (
+                     <TouchableOpacity
+                        style={styles.googleBtn}
+                        onPress={handleGoogleSignIn}
+                        disabled={googleLoading}
+                        activeOpacity={0.85}
+                     >
+                        {googleLoading ? (
+                           <ActivityIndicator
+                              size="small"
+                              color={COLORS.textPrimary}
+                           />
+                        ) : (
+                           <>
+                              <Text style={styles.googleIcon}>G</Text>
+                              <Text style={styles.googleBtnText}>
+                                 Continue with Google
+                              </Text>
+                           </>
+                        )}
+                     </TouchableOpacity>
+                  ) : (
+                     // Show a disabled hint in Expo Go so user knows it exists
+                     <View style={[styles.googleBtn, { opacity: 0.4 }]}>
+                        <Text style={styles.googleIcon}>G</Text>
+                        <Text style={styles.googleBtnText}>
+                           Google Sign-In (dev build only)
+                        </Text>
+                     </View>
+                  )}
 
-                  {/* Divider */}
                   <View style={styles.orDivider}>
                      <View style={styles.orLine} />
                      <Text style={styles.orText}>or</Text>
@@ -514,7 +542,6 @@ const styles = StyleSheet.create({
    },
    orLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
    orText: { fontFamily: FONTS.body, fontSize: 12, color: COLORS.textDim },
-
    modeToggle: {
       flexDirection: "row",
       backgroundColor: COLORS.bgElevated,

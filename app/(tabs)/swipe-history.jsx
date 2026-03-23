@@ -1,3 +1,15 @@
+// app/(tabs)/swipe-history.jsx
+//
+// Placeholder — this tab is hidden in the tab bar (_layout.jsx has it commented out).
+// Expo Router requires every file in the app directory to have a default export,
+// even if the screen is not linked anywhere.
+
+import { View } from "react-native";
+
+export default function SwipeHistoryScreen() {
+   return <View />;
+}
+
 // // app/(tabs)/swipe-history.jsx
 // // ─────────────────────────────────────────────────────────────────────────────
 // // SWIPE HISTORY
