@@ -30,6 +30,7 @@ import { matchingAPI } from "../../services/api";
 import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
 import { usePremium } from "../hooks/usePremium";
 import PaywallModal from "./paywall";
+import { fetchProfiles } from "../../store/slices/discoverSlice";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -605,7 +606,13 @@ export default function MatchesScreen() {
                      </View>
                      <TouchableOpacity
                         style={[s.boostBtn, boostActive && s.boostBtnActive]}
-                        onPress={activateBoost}
+                        onPress={async () => {
+                           const result = await activateBoost();
+                           if (result?.success) {
+                              // Re-fetch discover deck so boosted profiles sort to top
+                              dispatch(fetchProfiles());
+                           }
+                        }}
                      >
                         <Text style={s.boostBtnText}>
                            {boostActive ? "🚀 Boosting" : "🚀 Boost"}

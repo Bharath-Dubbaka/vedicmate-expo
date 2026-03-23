@@ -243,16 +243,22 @@ export default function CosmicRevealScreen() {
    };
 
    // ── Complete onboarding ───────────────────────────────────────────────────
+   // We need to explicitly push to photo-upload BEFORE onboarding is marked complete.
+
    const handleComplete = async () => {
       try {
          setCompleting(true);
-         console.log("[COSMIC REVEAL] Completing onboarding...");
 
          await onboardingAPI.complete();
-         console.log("[COSMIC REVEAL] Onboarding complete API call success");
 
-         // Fetch FULL user from /me so Redux has preferences/kundli/gender/lookingFor
-         // (register only stored id/name/email — profile page would show defaults otherwise)
+         // ── Navigate to photo upload FIRST, before Redux knows onboarding is complete ──
+         // If we dispatch updateUser(freshUser) first, NavigationGuard sees
+         // onboardingComplete:true and immediately redirects to discover,
+         // skipping the photo upload screen entirely.
+         router.replace("/(onboarding)/photo-upload");
+
+         // Then update Redux in the background — NavigationGuard won't fire again
+         // because we're already on an onboarding route
          const { authAPI } = await import("../../services/api");
          const meRes = await authAPI.getMe();
          const freshUser = meRes.data.user;
@@ -267,7 +273,7 @@ export default function CosmicRevealScreen() {
             "[COSMIC REVEAL] Complete onboarding error:",
             err.message,
          );
-         // Fallback: at least mark complete so user can proceed
+         router.replace("/(onboarding)/photo-upload");
          await dispatch(updateUser({ onboardingComplete: true }));
       } finally {
          setCompleting(false);

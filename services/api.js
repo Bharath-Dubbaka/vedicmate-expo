@@ -78,6 +78,12 @@ export const authAPI = {
    savePushToken: (pushToken) => api.patch("/auth/push-token", { pushToken }),
    updateMe: (data) => api.patch("/auth/me", data), // ← bio + future fields
    googleAuth: (data) => api.post("/auth/google", data),
+   uploadPhoto: (formData) =>
+      api.post("/auth/photos", formData, {
+         headers: { "Content-Type": "multipart/form-data" },
+         timeout: 30000, // photo uploads can be slow on mobile
+      }),
+   deletePhoto: () => api.delete("/auth/photos"),
 };
 
 // ── Onboarding ────────────────────────────────────────────────────────────────

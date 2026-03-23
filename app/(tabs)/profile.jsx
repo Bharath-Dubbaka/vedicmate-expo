@@ -15,6 +15,7 @@ import {
    TextInput,
    ActivityIndicator,
    Switch,
+   Image,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { useDispatch, useSelector } from "react-redux";
@@ -26,6 +27,7 @@ import { usePremium } from "../hooks/usePremium";
 import PaywallModal from "./paywall";
 import { useFocusEffect } from "expo-router";
 import { useCallback } from "react";
+import * as ImagePicker from "expo-image-picker";
 
 const GANA_CONFIG = {
    Deva: {
@@ -535,6 +537,53 @@ export default function ProfileScreen() {
       dispatch(updateUser({ bio: newBio }));
    };
 
+   const handlePhotoUpload = async () => {
+      const { status } =
+         await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+         Alert.alert(
+            "Permission needed",
+            "Please allow photo access in settings.",
+         );
+         return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+         mediaTypes: ["images"],
+         allowsEditing: true,
+         aspect: [1, 1],
+         quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+         const uri = result.assets[0].uri;
+         const filename = uri.split("/").pop();
+         const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
+         const mimeType =
+            ext === "png"
+               ? "image/png"
+               : ext === "webp"
+                 ? "image/webp"
+                 : "image/jpeg";
+
+         const formData = new FormData();
+         formData.append("photo", { uri, name: filename, type: mimeType });
+
+         try {
+            const res = await authAPI.uploadPhoto(formData);
+            if (res.data?.success) {
+               dispatch(updateUser({ photos: [res.data.photoUrl] }));
+               Alert.alert("✅ Photo updated!");
+            }
+         } catch (err) {
+            Alert.alert(
+               "Upload failed",
+               err?.response?.data?.message || err.message,
+            );
+         }
+      }
+   };
+
    if (!user) return null;
 
    return (
@@ -553,11 +602,42 @@ export default function ProfileScreen() {
             {kundli && gc && (
                <View style={[s.heroCard, { borderColor: gc.color + "60" }]}>
                   <View style={s.heroTop}>
-                     <View style={[s.avatar, { borderColor: gc.color }]}>
-                        <Text style={[s.avatarInitial, { color: gc.color }]}>
-                           {user.name?.[0]?.toUpperCase() || "?"}
-                        </Text>
-                     </View>
+                     {/* Replace the existing avatar View with this */}
+                     <TouchableOpacity
+                        style={[
+                           s.avatar,
+                           { borderColor: gc.color, overflow: "hidden" },
+                        ]}
+                        onPress={handlePhotoUpload}
+                        activeOpacity={0.85}
+                     >
+                        {user.photos?.[0] ? (
+                           <Image
+                              source={{ uri: user.photos[0] }}
+                              style={{
+                                 width: "100%",
+                                 height: "100%",
+                                 borderRadius: 36,
+                              }}
+                              resizeMode="cover"
+                           />
+                        ) : (
+                           <>
+                              <Text
+                                 style={[s.avatarInitial, { color: gc.color }]}
+                              >
+                                 {user.name?.[0]?.toUpperCase() || "?"}
+                              </Text>
+                              <Text style={s.avatarEditHint}>tap to add</Text>
+                           </>
+                        )}
+                        {/* Camera overlay when photo exists */}
+                        {user.photos?.[0] && (
+                           <View style={s.avatarOverlay}>
+                              <Text style={{ fontSize: 16 }}>📷</Text>
+                           </View>
+                        )}
+                     </TouchableOpacity>
                      <View style={s.heroNameBlock}>
                         <Text style={s.heroName}>{user.name}</Text>
                         <Text style={s.heroEmail}>{user.email}</Text>
@@ -1043,6 +1123,24 @@ const s = StyleSheet.create({
       flexShrink: 0,
    },
    avatarInitial: { fontFamily: FONTS.headingBold, fontSize: 28 },
+   avatarEditHint: {
+      fontFamily: FONTS.body,
+      fontSize: 9,
+      color: COLORS.textDim,
+      position: "absolute",
+      bottom: 4,
+   },
+   avatarOverlay: {
+      position: "absolute",
+      bottom: 0,
+      right: 0,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: COLORS.gold,
+      alignItems: "center",
+      justifyContent: "center",
+   },
    heroNameBlock: { flex: 1, gap: 2 },
    heroName: {
       fontFamily: FONTS.headingBold,

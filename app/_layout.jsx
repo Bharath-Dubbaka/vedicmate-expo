@@ -52,6 +52,10 @@ function NavigationGuard() {
       const inAuth = segments[0] === "(auth)";
       const inOnboarding = segments[0] === "(onboarding)";
       const inTabs = segments[0] === "(tabs)";
+      // photo-upload is a post-onboarding step, allowed even when
+      // onboardingComplete is true
+      const isPhotoUpload = segments[1] === "photo-upload";
+      if (isPhotoUpload) return;
 
       if (!token) {
          if (!inAuth) router.replace("/(auth)");
@@ -147,7 +151,6 @@ function PremiumInit() {
 
    return null;
 }
-
 
 // Core app setup: fonts, auth restore, push registration, badge clearing
 function InnerApp() {

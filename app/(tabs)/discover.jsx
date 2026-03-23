@@ -13,6 +13,7 @@ import {
    Modal,
    ScrollView,
    Pressable,
+   Image,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -31,6 +32,7 @@ import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
 import { matchingAPI } from "../../services/api";
 import { usePremium } from "../hooks/usePremium";
 import PaywallModal from "./paywall";
+import SwipeLimitBanner from "../../components/SwipeLimitBanner";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width - SPACING.xl * 2;
@@ -378,11 +380,22 @@ function SwipeCard({ profile, onLike, onPass, isTop, onOpenReport }) {
          {...(isTop ? panResponder.panHandlers : {})}
       >
          {/* Photo area */}
+         {/* NEW — real photo with fallback */}
          <View style={[styles.cardPhoto, { backgroundColor: gc.bg }]}>
-            <Text style={styles.photoPlaceholder}>👤</Text>
-            <Text style={styles.photoNakshatraEmoji}>
-               {profile.user.cosmicCard.nakshatra?.split(" ")[0] || "🌟"}
-            </Text>
+            {profile.user.photos?.[0] ? (
+               <Image
+                  source={{ uri: profile.user.photos[0] }}
+                  style={styles.cardPhotoImage}
+                  resizeMode="cover"
+               />
+            ) : (
+               <>
+                  <Text style={styles.photoPlaceholder}>👤</Text>
+                  <Text style={styles.photoNakshatraEmoji}>
+                     {profile.user.cosmicCard.nakshatra?.split(" ")[0] || "🌟"}
+                  </Text>
+               </>
+            )}
          </View>
 
          {/* LIKE / PASS labels */}
@@ -657,6 +670,12 @@ export default function DiscoverScreen() {
             <Text style={styles.headerLogo}>🔮</Text>
             <Text style={styles.headerTitle}>DISCOVER</Text>
          </View>
+         {/* Swipe limit banner — shows remaining swipes for free users */}
+         <SwipeLimitBanner
+            remaining={swipesRemaining}
+            isPremium={isPremium}
+            onUpgrade={() => setShowPaywall(true)}
+         />
 
          {/* Card Deck */}
          <View style={styles.deck}>
@@ -781,6 +800,13 @@ const styles = StyleSheet.create({
       height: "55%",
       alignItems: "center",
       justifyContent: "center",
+   },
+   cardPhotoImage: {
+      width: "100%",
+      height: "100%",
+      position: "absolute",
+      top: 0,
+      left: 0,
    },
    photoPlaceholder: { fontSize: 80, opacity: 0.4 },
    photoNakshatraEmoji: { fontSize: 36, marginTop: 6 },
