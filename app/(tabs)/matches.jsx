@@ -342,6 +342,7 @@ export default function MatchesScreen() {
    useFocusEffect(
       useCallback(() => {
          refreshPremium();
+         if (matches.length === 0) loadMatches();
       }, []),
    );
 
@@ -421,7 +422,7 @@ export default function MatchesScreen() {
 
    // ── MESSAGES tab ──────────────────────────────────────────────────────────
    const renderMessages = () => {
-      if (matchesLoading && !refreshing) {
+      if (matchesLoading && matches.length === 0 && !refreshing) {
          return (
             <View style={s.center}>
                <ActivityIndicator size="large" color={COLORS.gold} />
@@ -599,6 +600,16 @@ export default function MatchesScreen() {
          <View style={s.header}>
             <Text style={s.headerTitle}>Matches</Text>
             <View style={s.headerRight}>
+               <TouchableOpacity
+                  onPress={() => {
+                     if (topTab === 0) loadMatches();
+                     else if (topTab === 1) loadRequests();
+                     else loadViews();
+                  }}
+                  style={{ padding: 8, marginRight: 4 }}
+               >
+                  <Text style={{ fontSize: 18 }}>🔄</Text>
+               </TouchableOpacity>
                {isPremium ? (
                   <>
                      <View style={s.premiumBadge}>

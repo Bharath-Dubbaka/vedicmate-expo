@@ -186,7 +186,7 @@ export default function PaywallModal({ visible, onClose, triggerReason }) {
       liked_you: "Upgrade to see who liked you",
       profile_views: "Upgrade to see who viewed your profile",
       boost: "Upgrade to boost your profile",
-      default: "Unlock the full VedicMate experience",
+      default: "Unlock the full VedicFind experience",
    };
    const triggerMsg = triggerMessages[triggerReason] || triggerMessages.default;
 

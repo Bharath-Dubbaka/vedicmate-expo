@@ -185,7 +185,6 @@ function EditProfileModal({ visible, user, onClose, onSaved }) {
    const GENDERS = [
       { label: "Man", value: "male", emoji: "👨" },
       { label: "Woman", value: "female", emoji: "👩" },
-      { label: "Other", value: "other", emoji: "🌈" },
    ];
 
    const handleSave = async () => {
@@ -316,9 +315,17 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
       user?.preferences?.minGunaScore ?? 18,
    );
 
+   const [genderPref, setGenderPref] = useState(
+      user?.preferences?.genderPref ?? "female",
+   );
    const [lookingFor, setLookingFor] = useState(user?.lookingFor ?? "both");
    const [saving, setSaving] = useState(false);
 
+   const GENDER_PREF_OPTIONS = [
+      { label: "Men", value: "male", emoji: "👨" },
+      { label: "Women", value: "female", emoji: "👩" },
+      { label: "Both", value: "both", emoji: "💫" },
+   ];
    const LOOKING_OPTIONS = ["marriage", "dating", "both"];
 
    const handleSave = async () => {
@@ -328,7 +335,7 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
       }
       try {
          setSaving(true);
-         const prefs = { minAge, maxAge, minGunaScore: minGuna };
+         const prefs = { minAge, maxAge, minGunaScore: minGuna, genderPref };
          await onboardingAPI.saveProfile({
             gender: user.gender,
             preferences: prefs,
@@ -448,6 +455,34 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
                   </View>
                </View> */}
 
+               <View style={modal.section}>
+                  <Text style={modal.sectionLabel}>SHOW ME</Text>
+                  <View style={modal.pills}>
+                     {GENDER_PREF_OPTIONS.map((opt) => (
+                        <TouchableOpacity
+                           key={opt.value}
+                           style={[
+                              modal.pill,
+                              genderPref === opt.value && modal.pillActive,
+                           ]}
+                           onPress={() => setGenderPref(opt.value)}
+                        >
+                           <Text style={{ fontSize: 18, marginBottom: 4 }}>
+                              {opt.emoji}
+                           </Text>
+                           <Text
+                              style={[
+                                 modal.pillText,
+                                 genderPref === opt.value &&
+                                    modal.pillTextActive,
+                              ]}
+                           >
+                              {opt.label}
+                           </Text>
+                        </TouchableOpacity>
+                     ))}
+                  </View>
+               </View>
                {/* Looking for */}
                <View style={modal.section}>
                   <Text style={modal.sectionLabel}>LOOKING FOR</Text>
@@ -734,7 +769,7 @@ export default function ProfileScreen() {
                                  color: COLORS.gold,
                               }}
                            >
-                              VedicMate Premium
+                              VedicFind Premium
                            </Text>
                            <Text
                               style={{
@@ -815,7 +850,7 @@ export default function ProfileScreen() {
                                  color: COLORS.textSecondary,
                               }}
                            >
-                              5 swipes/day · Upgrade for unlimited
+                              15 swipes/day · Upgrade for unlimited
                            </Text>
                         </View>
                      </View>
@@ -1049,7 +1084,7 @@ export default function ProfileScreen() {
                   marginTop: 8,
                }}
             >
-               VedicMate · v1.0
+               VedicFind · v1.0
             </Text>
             <View style={{ height: 48 }} />
          </ScrollView>

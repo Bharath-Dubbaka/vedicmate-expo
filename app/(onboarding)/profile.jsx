@@ -22,7 +22,6 @@ import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
 const GENDERS = [
    { label: "Man", value: "male", emoji: "👨" },
    { label: "Woman", value: "female", emoji: "👩" },
-   { label: "Other", value: "other", emoji: "🌈" },
 ];
 const LOOKING_FOR = [
    { label: "Marriage", value: "marriage", emoji: "💍" },
@@ -112,7 +111,12 @@ export default function ProfileOnboardingScreen() {
                         styles.chip,
                         gender === g.value && styles.chipActive,
                      ]}
-                     onPress={() => setGender(g.value)}
+                     onPress={() => {
+                        setGender(g.value);
+                        // Auto-set opposite gender preference
+                        if (g.value === "male") setGenderPref("female");
+                        else if (g.value === "female") setGenderPref("male");
+                     }}
                   >
                      <Text style={styles.chipEmoji}>{g.emoji}</Text>
                      <Text

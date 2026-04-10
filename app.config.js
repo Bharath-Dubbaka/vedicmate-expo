@@ -9,7 +9,7 @@ module.exports = {
       icon: "./assets/icon.png",
       scheme: "vedicmatedbk369",
       splash: {
-         image: "./assets/splash.png",
+         image: "./assets/splashVF.png",
          resizeMode: "contain",
          backgroundColor: "#0A0B14",
       },

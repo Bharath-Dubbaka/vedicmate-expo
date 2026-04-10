@@ -4,7 +4,7 @@
 // 100% live data — saves to real API, Nakshatra computed on backend
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
    View,
    Text,
@@ -18,16 +18,26 @@ import {
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
-import { onboardingAPI } from "../../services/api";
+import { useDispatch, useSelector } from "react-redux";
+import { onboardingAPI, authAPI } from "../../services/api";
+import { updateUser, selectUser } from "../../store/slices/authSlice";
 import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
 
 const STEPS = ["Date of Birth", "Time of Birth", "Place of Birth"];
 
 export default function BirthDetailsScreen() {
    const router = useRouter();
+   const dispatch = useDispatch();
+   const user = useSelector(selectUser);
 
    const [currentStep, setCurrentStep] = useState(0);
+   const [displayName, setDisplayName] = useState("");
    const [loading, setLoading] = useState(false);
+
+   // Set name from Google OAuth on mount
+   useEffect(() => {
+      if (user?.name) setDisplayName(user.name);
+   }, []);
 
    // Birth data state
    const [dob, setDob] = useState(new Date(1995, 0, 1));
@@ -35,9 +45,64 @@ export default function BirthDetailsScreen() {
    const [showDob, setShowDob] = useState(false);
    const [showTob, setShowTob] = useState(false);
    const [place, setPlace] = useState("");
+   const [geocoding, setGeocoding] = useState(false);
+   const [geocodeResult, setGeocodeResult] = useState(null);
    const [lat, setLat] = useState("");
    const [lng, setLng] = useState("");
 
+   // Geocode place name → lat/long using OpenStreetMap (free, no API key)
+   const geocodePlace = async (placeName) => {
+      if (!placeName.trim() || placeName.trim().length < 3) return;
+      setGeocoding(true);
+      setGeocodeResult(null);
+      try {
+         const encoded = encodeURIComponent(placeName.trim());
+         const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1&countrycodes=in`,
+            {
+               headers: {
+                  "User-Agent": "VedicFind/1.0 (vedicfind@gmail.com)",
+               },
+            },
+         );
+         const data = await response.json();
+         if (data && data.length > 0) {
+            const result = data[0];
+            const newLat = parseFloat(result.lat).toFixed(4);
+            const newLng = parseFloat(result.lon).toFixed(4);
+            setLat(newLat);
+            setLng(newLng);
+            setGeocodeResult(result.display_name);
+            console.log(`[GEOCODE] ${placeName} → ${newLat}, ${newLng}`);
+         } else {
+            // Not found in India, try worldwide
+            const response2 = await fetch(
+               `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`,
+               {
+                  headers: {
+                     "User-Agent": "VedicFind/1.0 (vedicfind@gmail.com)",
+                  },
+               },
+            );
+            const data2 = await response2.json();
+            if (data2 && data2.length > 0) {
+               const result = data2[0];
+               const newLat = parseFloat(result.lat).toFixed(4);
+               const newLng = parseFloat(result.lon).toFixed(4);
+               setLat(newLat);
+               setLng(newLng);
+               setGeocodeResult(result.display_name);
+            } else {
+               setGeocodeResult(null);
+               console.log(`[GEOCODE] No results for: ${placeName}`);
+            }
+         }
+      } catch (err) {
+         console.error("[GEOCODE] Error:", err.message);
+      } finally {
+         setGeocoding(false);
+      }
+   };
    const progressAnim = useRef(new Animated.Value(1 / STEPS.length)).current;
 
    const animateProgress = (step) => {
@@ -86,7 +151,11 @@ export default function BirthDetailsScreen() {
          const res = await onboardingAPI.saveBirthDetails(payload);
          console.log("[BIRTH DETAILS] Success:", res.data.kundli?.nakshatra);
 
-         // Navigate to profile setup (next onboarding step)
+         // Save name if changed
+         if (displayName.trim() && displayName.trim() !== user?.name) {
+            await authAPI.updateMe({ name: displayName.trim() });
+            await dispatch(updateUser({ name: displayName.trim() }));
+         }
          router.push("/(onboarding)/profile");
       } catch (err) {
          console.error(
@@ -241,53 +310,155 @@ export default function BirthDetailsScreen() {
                      <Text style={styles.inputLabel}>
                         CITY / PLACE OF BIRTH
                      </Text>
-                     <TextInput
-                        style={styles.input}
-                        placeholder="e.g. Hyderabad, Telangana"
-                        placeholderTextColor={COLORS.textDim}
-                        value={place}
-                        onChangeText={setPlace}
-                        autoCapitalize="words"
-                     />
+                     <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+                        <TextInput
+                           style={[styles.input, { flex: 1 }]}
+                           placeholder="e.g. Hyderabad, Goa, Mumbai"
+                           placeholderTextColor={COLORS.textDim}
+                           value={place}
+                           onChangeText={(text) => {
+                              setPlace(text);
+                              setGeocodeResult(null);
+                              setLat("");
+                              setLng("");
+                           }}
+                           onEndEditing={() => geocodePlace(place)}
+                           autoCapitalize="words"
+                           returnKeyType="search"
+                           onSubmitEditing={() => geocodePlace(place)}
+                        />
+                        <TouchableOpacity
+                           style={{
+                              backgroundColor: geocoding
+                                 ? COLORS.bgElevated
+                                 : COLORS.gold,
+                              borderRadius: RADIUS.md,
+                              paddingHorizontal: SPACING.md,
+                              justifyContent: "center",
+                              opacity: geocoding ? 0.6 : 1,
+                           }}
+                           onPress={() => geocodePlace(place)}
+                           disabled={geocoding}
+                        >
+                           {geocoding ? (
+                              <ActivityIndicator
+                                 size="small"
+                                 color={COLORS.bg}
+                              />
+                           ) : (
+                              <Text
+                                 style={{
+                                    fontFamily: FONTS.bodyBold,
+                                    fontSize: 13,
+                                    color: COLORS.bg,
+                                 }}
+                              >
+                                 Find 📍
+                              </Text>
+                           )}
+                        </TouchableOpacity>
+                     </View>
+
+                     {/* Show geocode result */}
+                     {geocodeResult && (
+                        <View
+                           style={{
+                              marginTop: SPACING.sm,
+                              backgroundColor: COLORS.bgElevated,
+                              borderRadius: RADIUS.md,
+                              padding: SPACING.sm,
+                              borderWidth: 1,
+                              borderColor: "#4CAF50",
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: SPACING.sm,
+                           }}
+                        >
+                           <Text style={{ fontSize: 14 }}>✅</Text>
+                           <View style={{ flex: 1 }}>
+                              <Text
+                                 style={{
+                                    fontFamily: FONTS.bodyMedium,
+                                    fontSize: 12,
+                                    color: "#4CAF50",
+                                    marginBottom: 2,
+                                 }}
+                              >
+                                 Location found
+                              </Text>
+                              <Text
+                                 style={{
+                                    fontFamily: FONTS.body,
+                                    fontSize: 11,
+                                    color: COLORS.textSecondary,
+                                 }}
+                                 numberOfLines={2}
+                              >
+                                 {geocodeResult}
+                              </Text>
+                              <Text
+                                 style={{
+                                    fontFamily: FONTS.body,
+                                    fontSize: 11,
+                                    color: COLORS.textDim,
+                                    marginTop: 2,
+                                 }}
+                              >
+                                 {lat}, {lng}
+                              </Text>
+                           </View>
+                        </View>
+                     )}
+
+                     {/* Not found warning */}
+                     {!geocoding &&
+                        !geocodeResult &&
+                        place.length > 3 &&
+                        !lat && (
+                           <Text
+                              style={{
+                                 fontFamily: FONTS.body,
+                                 fontSize: 11,
+                                 color: COLORS.rose,
+                                 marginTop: 4,
+                              }}
+                           >
+                              Location not found. Try a nearby city name.
+                           </Text>
+                        )}
                   </View>
 
-                  <View style={styles.row}>
-                     <View
-                        style={[
-                           styles.inputGroup,
-                           { flex: 1, marginRight: SPACING.sm },
-                        ]}
+                  <View style={styles.inputGroup}>
+                     <Text style={styles.inputLabel}>YOUR DISPLAY NAME</Text>
+                     <TextInput
+                        style={styles.input}
+                        placeholder="How you'll appear to matches"
+                        placeholderTextColor={COLORS.textDim}
+                        value={displayName}
+                        onChangeText={setDisplayName}
+                        autoCapitalize="words"
+                        maxLength={50}
+                     />
+                     <Text
+                        style={{
+                           fontFamily: FONTS.body,
+                           fontSize: 11,
+                           color: COLORS.textDim,
+                           marginTop: 4,
+                        }}
                      >
-                        <Text style={styles.inputLabel}>LATITUDE (opt.)</Text>
-                        <TextInput
-                           style={styles.input}
-                           placeholder="17.3850"
-                           placeholderTextColor={COLORS.textDim}
-                           value={lat}
-                           onChangeText={setLat}
-                           keyboardType="decimal-pad"
-                        />
-                     </View>
-                     <View style={[styles.inputGroup, { flex: 1 }]}>
-                        <Text style={styles.inputLabel}>LONGITUDE (opt.)</Text>
-                        <TextInput
-                           style={styles.input}
-                           placeholder="78.4867"
-                           placeholderTextColor={COLORS.textDim}
-                           value={lng}
-                           onChangeText={setLng}
-                           keyboardType="decimal-pad"
-                        />
-                     </View>
+                        ⚠️ Gender and date of birth cannot be changed after this
+                        step
+                     </Text>
                   </View>
 
                   <View style={styles.infoBox}>
                      <Text style={styles.infoIcon}>🌐</Text>
                      <Text style={styles.infoText}>
-                        IST (UTC +5:30) is used for all Indian birth places.
-                        Latitude/Longitude are optional — defaults to Hyderabad
-                        if blank. Future version: auto-complete city →
-                        coordinates.
+                        Type your birth city and tap "Find 📍" to auto-detect
+                        coordinates. IST (UTC +5:30) is used for Indian birth
+                        places. Accurate coordinates improve Nakshatra
+                        precision.
                      </Text>
                   </View>
                </View>

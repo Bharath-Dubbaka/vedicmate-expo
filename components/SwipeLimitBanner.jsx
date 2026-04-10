@@ -59,7 +59,7 @@ import {
 } from "react-native";
 import { COLORS, FONTS, SPACING, RADIUS } from "../constants/theme";
 
-const FREE_DAILY_LIMIT = 5;
+const FREE_DAILY_LIMIT = 15;
 
 export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
    // Don't render anything for premium users

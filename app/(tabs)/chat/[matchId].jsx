@@ -21,6 +21,8 @@ import {
    KeyboardAvoidingView,
    Platform,
    ActivityIndicator,
+   Modal,
+   ScrollView,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useDispatch, useSelector } from "react-redux";
@@ -54,6 +56,8 @@ export default function ChatScreen() {
 
    const [inputText, setInputText] = useState("");
    const [theirTyping, setTheirTyping] = useState(false);
+   const [showProfile, setShowProfile] = useState(false);
+
    const [matchInfo, setMatchInfo] = useState(null);
 
    // Use the matches from Redux to get match info
@@ -268,8 +272,11 @@ export default function ChatScreen() {
                   </Text>
                )}
             </View>
-            <TouchableOpacity style={styles.kundliBtn}>
-               <Text style={styles.kundliBtnText}>🔮</Text>
+            <TouchableOpacity
+               style={styles.kundliBtn}
+               onPress={() => setShowProfile(true)}
+            >
+               <Text style={styles.kundliBtnText}>👤</Text>
             </TouchableOpacity>
          </View>
 
@@ -346,6 +353,136 @@ export default function ChatScreen() {
                <Text style={styles.sendBtnText}>✦</Text>
             </TouchableOpacity>
          </View>
+
+         <Modal
+            visible={showProfile}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => setShowProfile(false)}
+         >
+            <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+               <View
+                  style={{
+                     flexDirection: "row",
+                     alignItems: "center",
+                     paddingHorizontal: 20,
+                     paddingTop: 56,
+                     paddingBottom: 16,
+                     borderBottomWidth: 1,
+                     borderBottomColor: COLORS.border,
+                  }}
+               >
+                  <TouchableOpacity
+                     onPress={() => setShowProfile(false)}
+                     style={{ padding: 8 }}
+                  >
+                     <Text
+                        style={{
+                           fontFamily: FONTS.bodyBold,
+                           fontSize: 22,
+                           color: COLORS.textPrimary,
+                        }}
+                     >
+                        ←
+                     </Text>
+                  </TouchableOpacity>
+                  <Text
+                     style={{
+                        fontFamily: FONTS.bodyBold,
+                        fontSize: 17,
+                        color: COLORS.textPrimary,
+                        marginLeft: 8,
+                     }}
+                  >
+                     {matchInfo?.name || "Profile"}
+                  </Text>
+               </View>
+               <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
+                  {/* Nakshatra */}
+                  <View
+                     style={{
+                        backgroundColor: COLORS.bgCard,
+                        borderRadius: 16,
+                        padding: 20,
+                        borderWidth: 1,
+                        borderColor: COLORS.border,
+                     }}
+                  >
+                     <Text
+                        style={{
+                           fontFamily: FONTS.body,
+                           fontSize: 11,
+                           color: COLORS.gold,
+                           letterSpacing: 3,
+                           marginBottom: 8,
+                        }}
+                     >
+                        COSMIC IDENTITY
+                     </Text>
+                     <Text
+                        style={{
+                           fontFamily: FONTS.headingBold,
+                           fontSize: 24,
+                           color: COLORS.textPrimary,
+                           marginBottom: 4,
+                        }}
+                     >
+                        {matchInfo?.nakshatra || "—"}
+                     </Text>
+                     <Text
+                        style={{
+                           fontFamily: FONTS.body,
+                           fontSize: 14,
+                           color: COLORS.textSecondary,
+                        }}
+                     >
+                        {matchInfo?.name}, your cosmic match
+                     </Text>
+                  </View>
+                  {/* Compatibility */}
+                  <View
+                     style={{
+                        backgroundColor: COLORS.bgCard,
+                        borderRadius: 16,
+                        padding: 20,
+                        borderWidth: 1,
+                        borderColor: COLORS.border,
+                     }}
+                  >
+                     <Text
+                        style={{
+                           fontFamily: FONTS.body,
+                           fontSize: 11,
+                           color: COLORS.gold,
+                           letterSpacing: 3,
+                           marginBottom: 8,
+                        }}
+                     >
+                        COMPATIBILITY
+                     </Text>
+                     <Text
+                        style={{
+                           fontFamily: FONTS.headingBold,
+                           fontSize: 32,
+                           color: COLORS.gold,
+                        }}
+                     >
+                        {matchInfo?.gunaScore}/36
+                     </Text>
+                     <Text
+                        style={{
+                           fontFamily: FONTS.bodyMedium,
+                           fontSize: 15,
+                           color: COLORS.textPrimary,
+                           marginTop: 4,
+                        }}
+                     >
+                        {matchInfo?.verdict}
+                     </Text>
+                  </View>
+               </ScrollView>
+            </View>
+         </Modal>
       </KeyboardAvoidingView>
    );
 }

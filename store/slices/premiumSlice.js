@@ -6,7 +6,7 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CACHE_KEY = "vedicmate_premium_cache";
-const FREE_DAILY_LIMIT = 5;
+const FREE_DAILY_LIMIT = 15;
 
 // ── Async thunk: fetch status from backend ────────────────────────────────────
 export const fetchPremiumStatus = createAsyncThunk(
@@ -35,26 +35,26 @@ export const fetchPremiumStatus = createAsyncThunk(
 );
 
 // ── Async thunk: purchase / grant dev premium ─────────────────────────────────
-export const purchasePremium = createAsyncThunk(
-   "premium/purchase",
-   async (
-      { planKey = "annual", devMode = false } = {},
-      { dispatch, rejectWithValue },
-   ) => {
-      try {
-         const api = (await import("../../services/api")).default;
-         const res = await api.post("/premium/verify", { devMode: true });
-         if (res.data?.success) {
-            // Immediately re-fetch the authoritative status from backend
-            await dispatch(fetchPremiumStatus());
-            return { success: true };
-         }
-         return rejectWithValue("Purchase failed");
-      } catch (err) {
-         return rejectWithValue(err.response?.data?.message || err.message);
-      }
-   },
-);
+// export const purchasePremium = createAsyncThunk(
+//    "premium/purchase",
+//    async (
+//       { planKey = "annual", devMode = false } = {},
+//       { dispatch, rejectWithValue },
+//    ) => {
+//       try {
+//          const api = (await import("../../services/api")).default;
+//          const res = await api.post("/premium/verify", { devMode: true });
+//          if (res.data?.success) {
+//             // Immediately re-fetch the authoritative status from backend
+//             await dispatch(fetchPremiumStatus());
+//             return { success: true };
+//          }
+//          return rejectWithValue("Purchase failed");
+//       } catch (err) {
+//          return rejectWithValue(err.response?.data?.message || err.message);
+//       }
+//    },
+// );
 
 const initialState = {
    isLoading: false,

@@ -35,6 +35,8 @@ import {
    clearBadgeCount,
 } from "../services/notifications";
 import { fetchPremiumStatus, resetPremium } from "../store/slices/premiumSlice";
+import Purchases from "react-native-purchases";
+import NetworkBanner from "../components/NetworkBanner";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -135,19 +137,40 @@ function PushNotificationHandler() {
 function PremiumInit() {
    const dispatch = useDispatch();
    const token = useSelector(selectToken);
+   const user = useSelector(selectUser);
    const prevTokenRef = useRef(null);
 
+   // Configure RC once on mount
+   useEffect(() => {
+      if (process.env.EXPO_PUBLIC_REVENUECAT_KEY) {
+         Purchases.configure({
+            apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY,
+         });
+      }
+   }, []);
+
+   // Login/logout RC when auth state changes
    useEffect(() => {
       const wasLoggedIn = !!prevTokenRef.current;
       const isNowLoggedIn = !!token;
       prevTokenRef.current = token;
 
       if (isNowLoggedIn && !wasLoggedIn) {
+         // User just logged in — identify them in RC
+         if (user?.id) {
+            Purchases.logIn(user.id)
+               .then(() => console.log("[RC] Logged in user:", user.id))
+               .catch((err) => console.warn("[RC] Login error:", err.message));
+         }
          dispatch(fetchPremiumStatus());
       } else if (!isNowLoggedIn && wasLoggedIn) {
+         // User logged out — reset RC
+         Purchases.logOut()
+            .then(() => console.log("[RC] Logged out"))
+            .catch(() => {});
          dispatch(resetPremium());
       }
-   }, [token]);
+   }, [token, user?.id]);
 
    return null;
 }
@@ -208,6 +231,7 @@ function InnerApp() {
    return (
       <>
          <StatusBar style="light" />
+         <NetworkBanner />
          <NavigationGuard />
          <PushNotificationHandler />
          <PremiumInit />

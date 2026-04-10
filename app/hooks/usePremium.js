@@ -5,9 +5,9 @@
 import { useCallback } from "react";
 import { Alert } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import Purchases from "react-native-purchases";
 import {
    fetchPremiumStatus,
-   purchasePremium,
    decrementSwipe,
    selectIsPremium,
    selectPremiumPlan,
@@ -23,7 +23,7 @@ import api from "../../services/api";
 export const PRICING = {
    monthly: {
       productId: "vedicmate_premium_monthly",
-      price: "₹499",
+      price: "₹70",
       period: "month",
       label: "Monthly",
       savingsLabel: null,
@@ -31,11 +31,11 @@ export const PRICING = {
    },
    annual: {
       productId: "vedicmate_premium_annual",
-      price: "₹3,999",
+      price: "600",
       period: "year",
       label: "Annual",
-      savingsLabel: "Save 33%",
-      monthlyEquivalent: "₹333/mo",
+      savingsLabel: "Save 29%",
+      monthlyEquivalent: "₹50/mo",
    },
 };
 
@@ -56,28 +56,70 @@ export const usePremium = () => {
       dispatch(fetchPremiumStatus());
    }, [dispatch]);
 
-   // Purchase — dev mode simulation in Expo Go, real RC purchase needs a dev build
+   // Purchase
    const purchase = useCallback(
       async (planKey = "annual") => {
-         const result = await dispatch(purchasePremium({ planKey }));
-         if (purchasePremium.fulfilled.match(result)) {
-            Alert.alert(
-               "✨ Premium Activated (Dev Mode)",
-               "Simulated purchase — no real payment. A dev build is needed for real Google Play billing.",
-            );
-            return { success: true };
+         try {
+            const offerings = await Purchases.getOfferings();
+            const offering = offerings.current;
+            if (!offering) {
+               Alert.alert(
+                  "Error",
+                  "No offerings available. Please try again.",
+               );
+               return { success: false };
+            }
+            const packageToPurchase =
+               planKey === "monthly" ? offering.monthly : offering.annual;
+            if (!packageToPurchase) {
+               Alert.alert("Error", "Package not found.");
+               return { success: false };
+            }
+            const { customerInfo } =
+               await Purchases.purchasePackage(packageToPurchase);
+            if (customerInfo.entitlements.active["premium"]) {
+               const api = (await import("../../services/api")).default;
+               await api.post("/premium/verify", {
+                  receipt: customerInfo.originalAppUserId,
+                  platform: "android",
+               });
+               dispatch(fetchPremiumStatus());
+               Alert.alert(
+                  "✨ Premium Activated!",
+                  "Welcome to VedicFind Premium!",
+               );
+               return { success: true };
+            }
+            return { success: false };
+         } catch (err) {
+            if (!err.userCancelled) {
+               Alert.alert("Error", err.message || "Purchase failed");
+            }
+            return { success: false };
          }
-         Alert.alert("Error", result.payload || "Purchase failed");
-         return { success: false };
       },
       [dispatch],
    );
 
-   // Restore purchases — requires a real dev build with RC SDK
+   // Restore purchases
    const restore = useCallback(async () => {
-      Alert.alert("Not Available", "Restore requires a development build.");
-      return { success: false };
-   }, []);
+      try {
+         const customerInfo = await Purchases.restorePurchases();
+         if (customerInfo.entitlements.active["premium"]) {
+            dispatch(fetchPremiumStatus());
+            Alert.alert("✅ Purchases Restored!", "Your premium is active.");
+            return { success: true };
+         }
+         Alert.alert(
+            "No Purchases Found",
+            "No active subscriptions to restore.",
+         );
+         return { success: false };
+      } catch (err) {
+         Alert.alert("Error", err.message);
+         return { success: false };
+      }
+   }, [dispatch]);
 
    // Activate profile boost (premium users only)
    const activateBoost = useCallback(async () => {
