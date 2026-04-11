@@ -33,10 +33,11 @@ import { matchingAPI } from "../../services/api";
 import { usePremium } from "../hooks/usePremium";
 import PaywallModal from "./paywall";
 import SwipeLimitBanner from "../../components/SwipeLimitBanner";
+import CompatibilityModal from "../../components/CompatibilityModal";
 
 const { width, height } = Dimensions.get("window");
 const CARD_WIDTH = width - SPACING.xl * 2;
-const CARD_HEIGHT = height * 0.62;
+const CARD_HEIGHT = height * 0.72;
 const SWIPE_THRESHOLD = width * 0.35;
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -78,238 +79,6 @@ const KOOTA_LIST = [
    { key: "vashya", name: "Vashya", emoji: "💫", max: 2 },
    { key: "varna", name: "Varna", emoji: "📿", max: 1 },
 ];
-
-// ── Compatibility Modal ─────────────────────────────────────────────────────
-function CompatibilityModal({ visible, profile, onClose }) {
-   if (!profile) return null;
-
-   const vc =
-      VERDICT_CONFIG[profile.compatibility.verdict] ||
-      VERDICT_CONFIG["Average Match"];
-   const gc = GANA_CONFIG[profile.user.cosmicCard.gana] || GANA_CONFIG.Manushya;
-   const pct = Math.round((profile.compatibility.totalScore / 36) * 100);
-
-   return (
-      <Modal
-         visible={visible}
-         animationType="slide"
-         presentationStyle="pageSheet"
-         onRequestClose={onClose}
-      >
-         <View style={modal.container}>
-            {/* Handle bar */}
-            <View style={modal.handle} />
-
-            <ScrollView
-               style={{ flex: 1 }}
-               contentContainerStyle={modal.scroll}
-               showsVerticalScrollIndicator={false}
-            >
-               {/* Header — name + verdict */}
-               <View style={modal.header}>
-                  <View style={modal.headerLeft}>
-                     <Text style={modal.personName}>
-                        {profile.user.name}, {profile.user.age}
-                     </Text>
-                     <Text style={modal.personSub}>
-                        {profile.user.cosmicCard.nakshatra} ·{" "}
-                        {profile.user.cosmicCard.rashi} Moon
-                     </Text>
-                  </View>
-                  <View style={[modal.verdictBadge, { borderColor: vc.color }]}>
-                     <Text style={modal.verdictEmoji}>{vc.emoji}</Text>
-                     <View>
-                        <Text style={[modal.verdictScore, { color: vc.color }]}>
-                           {profile.compatibility.totalScore}/36
-                        </Text>
-                        <Text style={[modal.verdictLabel, { color: vc.color }]}>
-                           {profile.compatibility.verdict}
-                        </Text>
-                     </View>
-                  </View>
-               </View>
-
-               {/* Score arc / big number */}
-               <View style={modal.scoreHero}>
-                  <View style={[modal.scoreCircle, { borderColor: vc.color }]}>
-                     <Text style={[modal.scoreNumber, { color: vc.color }]}>
-                        {pct}%
-                     </Text>
-                     <Text style={modal.scoreLabel}>compatible</Text>
-                  </View>
-
-                  {/* Cosmic identity row */}
-                  <View style={modal.cosmicIdentity}>
-                     <View
-                        style={[
-                           modal.ganaChip,
-                           { backgroundColor: gc.bg, borderColor: gc.color },
-                        ]}
-                     >
-                        <Text style={modal.ganaChipEmoji}>{gc.emoji}</Text>
-                        <Text style={[modal.ganaChipText, { color: gc.color }]}>
-                           {profile.user.cosmicCard.gana} · {gc.label}
-                        </Text>
-                     </View>
-                     <View style={modal.cosmicDetails}>
-                        <Text style={modal.cosmicDetail}>
-                           🐾 {profile.user.cosmicCard.animal}
-                        </Text>
-                        <Text style={modal.cosmicDetailDot}>·</Text>
-                        <Text style={modal.cosmicDetail}>
-                           🌙 {profile.user.cosmicCard.rashi}
-                        </Text>
-                        <Text style={modal.cosmicDetailDot}>·</Text>
-                        <Text style={modal.cosmicDetail}>
-                           💫 {profile.user.cosmicCard.nadi}
-                        </Text>
-                     </View>
-                  </View>
-               </View>
-
-               {/* 8 Koota breakdown */}
-               <Text style={modal.sectionTitle}>ASHTA KOOTA BREAKDOWN</Text>
-               <View style={modal.kootaCard}>
-                  {KOOTA_LIST.map((k, idx) => {
-                     const entry = profile.compatibility.breakdown?.[k.key];
-                     const score = entry?.score ?? 0;
-                     const maxVal = entry?.max ?? k.max;
-                     const isPerfect = score === maxVal;
-                     const isZero = score === 0;
-                     const barPct = (score / maxVal) * 100;
-                     const barColor = isPerfect
-                        ? COLORS.gold
-                        : isZero
-                          ? "#E05C5C"
-                          : vc.color;
-
-                     return (
-                        <View
-                           key={k.key}
-                           style={[
-                              modal.kootaRow,
-                              idx < KOOTA_LIST.length - 1 &&
-                                 modal.kootaRowBorder,
-                           ]}
-                        >
-                           <Text style={modal.kootaEmoji}>{k.emoji}</Text>
-                           <View style={{ flex: 1 }}>
-                              <View style={modal.kootaTopRow}>
-                                 <Text style={modal.kootaName}>{k.name}</Text>
-                                 <Text
-                                    style={[
-                                       modal.kootaScore,
-                                       isPerfect && { color: COLORS.gold },
-                                       isZero && { color: "#E05C5C" },
-                                    ]}
-                                 >
-                                    {score}/{maxVal}
-                                    {isPerfect ? " ✓" : isZero ? " ✕" : ""}
-                                 </Text>
-                              </View>
-                              <View style={modal.kootaBarTrack}>
-                                 <View
-                                    style={[
-                                       modal.kootaBarFill,
-                                       {
-                                          width: `${barPct}%`,
-                                          backgroundColor: barColor,
-                                       },
-                                    ]}
-                                 />
-                              </View>
-                           </View>
-                        </View>
-                     );
-                  })}
-               </View>
-
-               {/* Doshas section */}
-               {profile.compatibility.doshas?.length > 0 && (
-                  <>
-                     <Text style={modal.sectionTitle}>DOSHAS</Text>
-                     <View style={modal.doshaCard}>
-                        {profile.compatibility.doshas.map((d, i) => (
-                           <View
-                              key={i}
-                              style={[
-                                 modal.doshaRow,
-                                 i < profile.compatibility.doshas.length - 1 &&
-                                    modal.doshaRowBorder,
-                              ]}
-                           >
-                              <View style={modal.doshaBadge}>
-                                 <Text style={modal.doshaBadgeText}>
-                                    {d.severity === "high" ? "⚠️" : "ℹ️"}
-                                 </Text>
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                 <Text style={modal.doshaName}>{d.name}</Text>
-                                 <Text style={modal.doshaDesc}>
-                                    {d.description}
-                                 </Text>
-                                 {d.cancellation && (
-                                    <Text style={modal.doshaCancelled}>
-                                       ✓ {d.cancellation}
-                                    </Text>
-                                 )}
-                              </View>
-                           </View>
-                        ))}
-                     </View>
-                  </>
-               )}
-
-               {/* Highlights */}
-               {profile.compatibility.highlights?.length > 0 && (
-                  <>
-                     <Text style={modal.sectionTitle}>TOP STRENGTHS</Text>
-                     <View style={modal.highlightsRow}>
-                        {profile.compatibility.highlights
-                           .slice(0, 4)
-                           .map((h) => (
-                              <View
-                                 key={h.name}
-                                 style={[
-                                    modal.strengthChip,
-                                    h.score === h.max && {
-                                       borderColor: COLORS.gold,
-                                       backgroundColor: "rgba(201,168,76,0.1)",
-                                    },
-                                 ]}
-                              >
-                                 <Text
-                                    style={[
-                                       modal.strengthScore,
-                                       h.score === h.max && {
-                                          color: COLORS.gold,
-                                       },
-                                    ]}
-                                 >
-                                    {h.score}/{h.max}
-                                 </Text>
-                                 <Text style={modal.strengthName}>
-                                    {h.name}
-                                 </Text>
-                              </View>
-                           ))}
-                     </View>
-                  </>
-               )}
-
-               <View style={{ height: 40 }} />
-            </ScrollView>
-
-            {/* Action buttons */}
-            <View style={modal.footer}>
-               <TouchableOpacity style={modal.closeBtn} onPress={onClose}>
-                  <Text style={modal.closeBtnText}>Close</Text>
-               </TouchableOpacity>
-            </View>
-         </View>
-      </Modal>
-   );
-}
 
 // ── Swipe Card ──────────────────────────────────────────────────────────────
 function SwipeCard({ profile, onLike, onPass, isTop, onOpenReport }) {
@@ -426,8 +195,15 @@ function SwipeCard({ profile, onLike, onPass, isTop, onOpenReport }) {
             </>
          )}
 
-         {/* Card info overlay */}
-         <View style={styles.cardInfo}>
+         {/* Card info overlay - scrollable*/}
+         <ScrollView
+            style={styles.cardInfo}
+            contentContainerStyle={{ paddingBottom: SPACING.md }}
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={isTop}
+            nestedScrollEnabled={true}
+         >
+            {/* <View style={styles.cardInfo}> */}
             {/* Name + age */}
             <View style={styles.nameRow}>
                <Text style={styles.cardName}>
@@ -491,9 +267,9 @@ function SwipeCard({ profile, onLike, onPass, isTop, onOpenReport }) {
                   </View>
                </View>
 
-               {/* Row 3: Mini koota bars (top 3) */}
+               {/* Full koota breakdown — all 8 */}
                <View style={styles.miniKootas}>
-                  {KOOTA_LIST.slice(0, 3).map((k) => {
+                  {KOOTA_LIST.map((k) => {
                      const entry = profile.compatibility.breakdown?.[k.key];
                      const score = entry?.score ?? 0;
                      const maxVal = entry?.max ?? k.max;
@@ -556,7 +332,7 @@ function SwipeCard({ profile, onLike, onPass, isTop, onOpenReport }) {
                   />
                </View>
             </View>
-         </View>
+         </ScrollView>
       </Animated.View>
    );
 }
@@ -840,10 +616,10 @@ const styles = StyleSheet.create({
       bottom: 0,
       left: 0,
       right: 0,
+      maxHeight: "55%",
       backgroundColor: "rgba(10,11,20,0.92)",
       paddingHorizontal: SPACING.md,
       paddingTop: SPACING.sm,
-      paddingBottom: SPACING.sm,
    },
    nameRow: {
       flexDirection: "row",
@@ -1042,232 +818,232 @@ const styles = StyleSheet.create({
 });
 
 // ── Modal styles ─────────────────────────────────────────────────────────────
-const modal = StyleSheet.create({
-   container: { flex: 1, backgroundColor: COLORS.bg },
-   handle: {
-      width: 40,
-      height: 4,
-      backgroundColor: COLORS.border,
-      borderRadius: 2,
-      alignSelf: "center",
-      marginTop: 12,
-      marginBottom: 4,
-   },
-   scroll: { padding: SPACING.xl },
-   header: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      marginBottom: SPACING.lg,
-   },
-   headerLeft: { flex: 1, marginRight: SPACING.md },
-   personName: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 22,
-      color: COLORS.textPrimary,
-      marginBottom: 2,
-   },
-   personSub: {
-      fontFamily: FONTS.body,
-      fontSize: 13,
-      color: COLORS.textSecondary,
-   },
-   verdictBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.sm,
-      borderWidth: 1.5,
-      borderRadius: RADIUS.lg,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: SPACING.sm,
-      backgroundColor: "rgba(0,0,0,0.3)",
-   },
-   verdictEmoji: { fontSize: 18 },
-   verdictScore: { fontFamily: FONTS.bodyBold, fontSize: 16 },
-   verdictLabel: { fontFamily: FONTS.body, fontSize: 11 },
+// const modal = StyleSheet.create({
+//    container: { flex: 1, backgroundColor: COLORS.bg },
+//    handle: {
+//       width: 40,
+//       height: 4,
+//       backgroundColor: COLORS.border,
+//       borderRadius: 2,
+//       alignSelf: "center",
+//       marginTop: 12,
+//       marginBottom: 4,
+//    },
+//    scroll: { padding: SPACING.xl },
+//    header: {
+//       flexDirection: "row",
+//       justifyContent: "space-between",
+//       alignItems: "flex-start",
+//       marginBottom: SPACING.lg,
+//    },
+//    headerLeft: { flex: 1, marginRight: SPACING.md },
+//    personName: {
+//       fontFamily: FONTS.headingBold,
+//       fontSize: 22,
+//       color: COLORS.textPrimary,
+//       marginBottom: 2,
+//    },
+//    personSub: {
+//       fontFamily: FONTS.body,
+//       fontSize: 13,
+//       color: COLORS.textSecondary,
+//    },
+//    verdictBadge: {
+//       flexDirection: "row",
+//       alignItems: "center",
+//       gap: SPACING.sm,
+//       borderWidth: 1.5,
+//       borderRadius: RADIUS.lg,
+//       paddingHorizontal: SPACING.md,
+//       paddingVertical: SPACING.sm,
+//       backgroundColor: "rgba(0,0,0,0.3)",
+//    },
+//    verdictEmoji: { fontSize: 18 },
+//    verdictScore: { fontFamily: FONTS.bodyBold, fontSize: 16 },
+//    verdictLabel: { fontFamily: FONTS.body, fontSize: 11 },
 
-   scoreHero: { alignItems: "center", marginBottom: SPACING.xl },
-   scoreCircle: {
-      width: 96,
-      height: 96,
-      borderRadius: 48,
-      borderWidth: 2.5,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: SPACING.md,
-      backgroundColor: "rgba(255,255,255,0.03)",
-   },
-   scoreNumber: { fontFamily: FONTS.headingBold, fontSize: 26 },
-   scoreLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      color: COLORS.textSecondary,
-   },
-   cosmicIdentity: { alignItems: "center", gap: SPACING.sm, width: "100%" },
-   ganaChip: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: 6,
-      borderRadius: RADIUS.full,
-      borderWidth: 1,
-   },
-   ganaChipEmoji: { fontSize: 14 },
-   ganaChipText: { fontFamily: FONTS.bodyMedium, fontSize: 13 },
-   cosmicDetails: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.sm,
-   },
-   cosmicDetail: {
-      fontFamily: FONTS.body,
-      fontSize: 13,
-      color: COLORS.textSecondary,
-   },
-   cosmicDetailDot: {
-      color: COLORS.textDim,
-      fontSize: 13,
-   },
+//    scoreHero: { alignItems: "center", marginBottom: SPACING.xl },
+//    scoreCircle: {
+//       width: 96,
+//       height: 96,
+//       borderRadius: 48,
+//       borderWidth: 2.5,
+//       alignItems: "center",
+//       justifyContent: "center",
+//       marginBottom: SPACING.md,
+//       backgroundColor: "rgba(255,255,255,0.03)",
+//    },
+//    scoreNumber: { fontFamily: FONTS.headingBold, fontSize: 26 },
+//    scoreLabel: {
+//       fontFamily: FONTS.body,
+//       fontSize: 11,
+//       color: COLORS.textSecondary,
+//    },
+//    cosmicIdentity: { alignItems: "center", gap: SPACING.sm, width: "100%" },
+//    ganaChip: {
+//       flexDirection: "row",
+//       alignItems: "center",
+//       gap: 6,
+//       paddingHorizontal: SPACING.md,
+//       paddingVertical: 6,
+//       borderRadius: RADIUS.full,
+//       borderWidth: 1,
+//    },
+//    ganaChipEmoji: { fontSize: 14 },
+//    ganaChipText: { fontFamily: FONTS.bodyMedium, fontSize: 13 },
+//    cosmicDetails: {
+//       flexDirection: "row",
+//       alignItems: "center",
+//       gap: SPACING.sm,
+//    },
+//    cosmicDetail: {
+//       fontFamily: FONTS.body,
+//       fontSize: 13,
+//       color: COLORS.textSecondary,
+//    },
+//    cosmicDetailDot: {
+//       color: COLORS.textDim,
+//       fontSize: 13,
+//    },
 
-   sectionTitle: {
-      fontFamily: FONTS.body,
-      fontSize: 10,
-      color: COLORS.textDim,
-      letterSpacing: 3,
-      marginBottom: SPACING.sm,
-   },
+//    sectionTitle: {
+//       fontFamily: FONTS.body,
+//       fontSize: 10,
+//       color: COLORS.textDim,
+//       letterSpacing: 3,
+//       marginBottom: SPACING.sm,
+//    },
 
-   // Koota breakdown card
-   kootaCard: {
-      backgroundColor: COLORS.bgCard,
-      borderRadius: RADIUS.xl,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-      marginBottom: SPACING.xl,
-      overflow: "hidden",
-   },
-   kootaRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.sm,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: 10,
-   },
-   kootaRowBorder: {
-      borderBottomWidth: 1,
-      borderBottomColor: COLORS.border,
-   },
-   kootaEmoji: { fontSize: 16, width: 22 },
-   kootaTopRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 5,
-   },
-   kootaName: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 13,
-      color: COLORS.textPrimary,
-   },
-   kootaScore: {
-      fontFamily: FONTS.bodyBold,
-      fontSize: 13,
-      color: COLORS.textSecondary,
-   },
-   kootaBarTrack: {
-      height: 4,
-      backgroundColor: COLORS.border,
-      borderRadius: 2,
-      overflow: "hidden",
-   },
-   kootaBarFill: { height: 4, borderRadius: 2 },
+//    // Koota breakdown card
+//    kootaCard: {
+//       backgroundColor: COLORS.bgCard,
+//       borderRadius: RADIUS.xl,
+//       borderWidth: 1,
+//       borderColor: COLORS.border,
+//       marginBottom: SPACING.xl,
+//       overflow: "hidden",
+//    },
+//    kootaRow: {
+//       flexDirection: "row",
+//       alignItems: "center",
+//       gap: SPACING.sm,
+//       paddingHorizontal: SPACING.md,
+//       paddingVertical: 10,
+//    },
+//    kootaRowBorder: {
+//       borderBottomWidth: 1,
+//       borderBottomColor: COLORS.border,
+//    },
+//    kootaEmoji: { fontSize: 16, width: 22 },
+//    kootaTopRow: {
+//       flexDirection: "row",
+//       justifyContent: "space-between",
+//       alignItems: "center",
+//       marginBottom: 5,
+//    },
+//    kootaName: {
+//       fontFamily: FONTS.bodyMedium,
+//       fontSize: 13,
+//       color: COLORS.textPrimary,
+//    },
+//    kootaScore: {
+//       fontFamily: FONTS.bodyBold,
+//       fontSize: 13,
+//       color: COLORS.textSecondary,
+//    },
+//    kootaBarTrack: {
+//       height: 4,
+//       backgroundColor: COLORS.border,
+//       borderRadius: 2,
+//       overflow: "hidden",
+//    },
+//    kootaBarFill: { height: 4, borderRadius: 2 },
 
-   // Doshas
-   doshaCard: {
-      backgroundColor: COLORS.bgCard,
-      borderRadius: RADIUS.xl,
-      borderWidth: 1,
-      borderColor: "#FF980040",
-      marginBottom: SPACING.xl,
-      overflow: "hidden",
-   },
-   doshaRow: {
-      flexDirection: "row",
-      gap: SPACING.sm,
-      padding: SPACING.md,
-   },
-   doshaRowBorder: {
-      borderBottomWidth: 1,
-      borderBottomColor: COLORS.border,
-   },
-   doshaBadge: { paddingTop: 2 },
-   doshaBadgeText: { fontSize: 16 },
-   doshaName: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 13,
-      color: COLORS.textPrimary,
-      marginBottom: 2,
-   },
-   doshaDesc: {
-      fontFamily: FONTS.body,
-      fontSize: 12,
-      color: COLORS.textSecondary,
-      lineHeight: 18,
-   },
-   doshaCancelled: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      color: "#4CAF50",
-      marginTop: 4,
-   },
+//    // Doshas
+//    doshaCard: {
+//       backgroundColor: COLORS.bgCard,
+//       borderRadius: RADIUS.xl,
+//       borderWidth: 1,
+//       borderColor: "#FF980040",
+//       marginBottom: SPACING.xl,
+//       overflow: "hidden",
+//    },
+//    doshaRow: {
+//       flexDirection: "row",
+//       gap: SPACING.sm,
+//       padding: SPACING.md,
+//    },
+//    doshaRowBorder: {
+//       borderBottomWidth: 1,
+//       borderBottomColor: COLORS.border,
+//    },
+//    doshaBadge: { paddingTop: 2 },
+//    doshaBadgeText: { fontSize: 16 },
+//    doshaName: {
+//       fontFamily: FONTS.bodyMedium,
+//       fontSize: 13,
+//       color: COLORS.textPrimary,
+//       marginBottom: 2,
+//    },
+//    doshaDesc: {
+//       fontFamily: FONTS.body,
+//       fontSize: 12,
+//       color: COLORS.textSecondary,
+//       lineHeight: 18,
+//    },
+//    doshaCancelled: {
+//       fontFamily: FONTS.body,
+//       fontSize: 11,
+//       color: "#4CAF50",
+//       marginTop: 4,
+//    },
 
-   // Highlights / strengths
-   highlightsRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: SPACING.sm,
-      marginBottom: SPACING.xl,
-   },
-   strengthChip: {
-      flex: 1,
-      minWidth: "44%",
-      backgroundColor: COLORS.bgCard,
-      borderRadius: RADIUS.lg,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-      padding: SPACING.md,
-      alignItems: "center",
-   },
-   strengthScore: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 18,
-      color: COLORS.textSecondary,
-      marginBottom: 2,
-   },
-   strengthName: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      color: COLORS.textDim,
-   },
+//    // Highlights / strengths
+//    highlightsRow: {
+//       flexDirection: "row",
+//       flexWrap: "wrap",
+//       gap: SPACING.sm,
+//       marginBottom: SPACING.xl,
+//    },
+//    strengthChip: {
+//       flex: 1,
+//       minWidth: "44%",
+//       backgroundColor: COLORS.bgCard,
+//       borderRadius: RADIUS.lg,
+//       borderWidth: 1,
+//       borderColor: COLORS.border,
+//       padding: SPACING.md,
+//       alignItems: "center",
+//    },
+//    strengthScore: {
+//       fontFamily: FONTS.headingBold,
+//       fontSize: 18,
+//       color: COLORS.textSecondary,
+//       marginBottom: 2,
+//    },
+//    strengthName: {
+//       fontFamily: FONTS.body,
+//       fontSize: 11,
+//       color: COLORS.textDim,
+//    },
 
-   // Footer
-   footer: {
-      padding: SPACING.xl,
-      paddingBottom: 40,
-      borderTopWidth: 1,
-      borderTopColor: COLORS.border,
-   },
-   closeBtn: {
-      borderWidth: 1,
-      borderColor: COLORS.border,
-      borderRadius: RADIUS.lg,
-      paddingVertical: SPACING.md,
-      alignItems: "center",
-   },
-   closeBtnText: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 15,
-      color: COLORS.textSecondary,
-   },
-});
+//    // Footer
+//    footer: {
+//       padding: SPACING.xl,
+//       paddingBottom: 40,
+//       borderTopWidth: 1,
+//       borderTopColor: COLORS.border,
+//    },
+//    closeBtn: {
+//       borderWidth: 1,
+//       borderColor: COLORS.border,
+//       borderRadius: RADIUS.lg,
+//       paddingVertical: SPACING.md,
+//       alignItems: "center",
+//    },
+//    closeBtnText: {
+//       fontFamily: FONTS.bodyMedium,
+//       fontSize: 15,
+//       color: COLORS.textSecondary,
+//    },
+// });

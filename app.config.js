@@ -1,7 +1,7 @@
 // app.config.js
 module.exports = {
    expo: {
-      name: "VedicMate",
+      name: "VedicFind",
       slug: "vedicmatedbk369",
       version: "1.0.0",
       orientation: "portrait",

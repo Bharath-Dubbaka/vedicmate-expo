@@ -31,6 +31,7 @@ import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
 import { usePremium } from "../hooks/usePremium";
 import PaywallModal from "./paywall";
 import { fetchProfiles } from "../../store/slices/discoverSlice";
+import CompatibilityModal from "../../components/CompatibilityModal";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -89,7 +90,7 @@ function SubTabBar({ tabs, active, onSelect }) {
 }
 
 // ── Chat / match card (MESSAGES tab) ─────────────────────────────────────────
-function MatchCard({ match, onPress }) {
+function MatchCard({ match, onPress, onPressCompat }) {
    const other = match.user ?? match.matchedUser;
    const photo = other?.photo ?? other?.photos?.[0];
    // unreadCount can be a Map object, a plain object, or a number depending on how Mongoose serializes it
@@ -125,9 +126,13 @@ function MatchCard({ match, onPress }) {
                   {other?.age ? `, ${other.age}` : ""}
                </Text>
                {gunaScore != null && (
-                  <View style={mc.scoreBadge}>
-                     <Text style={mc.scoreText}>{gunaScore}/36 ✦</Text>
-                  </View>
+                  <TouchableOpacity
+                     style={mc.scoreBadge}
+                     onPress={() => onPressCompat?.(match)}
+                     activeOpacity={0.7}
+                  >
+                     <Text style={mc.scoreText}>{gunaScore}/36 ✦ ›</Text>
+                  </TouchableOpacity>
                )}
             </View>
             {match.lastMessage ? (
@@ -231,7 +236,7 @@ function PremiumGateHeader({ count, label, onUpgrade }) {
 }
 
 // ── Regular card (visible to all — Sent tab and premium users) ────────────────
-function RequestCard({ user }) {
+function RequestCard({ user, onPress }) {
    const photo = user?.photos?.[0];
    const gana = user?.kundli?.gana;
    const GANA_COLOR = {
@@ -246,7 +251,11 @@ function RequestCard({ user }) {
    };
 
    return (
-      <View style={rc.card}>
+      <TouchableOpacity
+         style={rc.card}
+         onPress={() => onPress?.(user)}
+         activeOpacity={0.8}
+      >
          {photo ? (
             <Image source={{ uri: photo }} style={rc.photo} />
          ) : (
@@ -284,7 +293,7 @@ function RequestCard({ user }) {
                </Text>
             ) : null}
          </View>
-      </View>
+      </TouchableOpacity>
    );
 }
 
@@ -331,6 +340,7 @@ export default function MatchesScreen() {
 
    const [showPaywall, setShowPaywall] = useState(false);
    const [paywallReason, setPaywallReason] = useState("default");
+   const [selectedProfile, setSelectedProfile] = useState(null);
 
    const {
       isPremium,
@@ -434,7 +444,18 @@ export default function MatchesScreen() {
             data={matches}
             keyExtractor={(m) => String(m.matchId ?? m._id)}
             renderItem={({ item }) => (
-               <MatchCard match={item} onPress={onMatchPress} />
+               <MatchCard
+                  match={item}
+                  onPress={onMatchPress}
+                  onPressCompat={(match) =>
+                     setSelectedProfile({
+                        name: match.user?.name,
+                        nakshatra: match.user?.cosmicCard?.nakshatra,
+                        gunaScore: match.compatibility?.gunaScore,
+                        verdict: match.compatibility?.verdict,
+                     })
+                  }
+               />
             )}
             contentContainerStyle={
                matches.length === 0 ? s.fillCenter : s.listPad
@@ -497,7 +518,9 @@ export default function MatchesScreen() {
                <FlatList
                   data={listData}
                   keyExtractor={(u) => String(u._id)}
-                  renderItem={({ item }) => <RequestCard user={item} />}
+                  renderItem={({ item }) => (
+                     <RequestCard user={item} onPress={setSelectedProfile} />
+                  )}
                   contentContainerStyle={
                      listData.length === 0 ? s.fillCenter : s.listPad
                   }
@@ -567,7 +590,9 @@ export default function MatchesScreen() {
                <FlatList
                   data={listData}
                   keyExtractor={(u) => String(u._id)}
-                  renderItem={({ item }) => <RequestCard user={item} />}
+                  renderItem={({ item }) => (
+                     <RequestCard user={item} onPress={setSelectedProfile} />
+                  )}
                   contentContainerStyle={
                      listData.length === 0 ? s.fillCenter : s.listPad
                   }
@@ -652,6 +677,11 @@ export default function MatchesScreen() {
             visible={showPaywall}
             onClose={closePaywall}
             triggerReason={paywallReason}
+         />
+         <CompatibilityModal
+            visible={!!selectedProfile}
+            profile={selectedProfile}
+            onClose={() => setSelectedProfile(null)}
          />
       </SafeAreaView>
    );

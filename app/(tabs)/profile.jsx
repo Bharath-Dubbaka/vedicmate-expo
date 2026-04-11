@@ -178,8 +178,6 @@ function BioSection({ bio, onSaved }) {
 // ── Edit basic profile info modal (name, age, gender) ─────────────────────────
 function EditProfileModal({ visible, user, onClose, onSaved }) {
    const [name, setName] = useState(user?.name || "");
-   const [age, setAge] = useState(String(user?.age || ""));
-   const [gender, setGender] = useState(user?.gender || null);
    const [saving, setSaving] = useState(false);
 
    const GENDERS = [
@@ -192,26 +190,10 @@ function EditProfileModal({ visible, user, onClose, onSaved }) {
          Alert.alert("Required", "Please enter your name.");
          return;
       }
-      const parsedAge = parseInt(age);
-      if (!parsedAge || parsedAge < 18 || parsedAge > 100) {
-         Alert.alert(
-            "Invalid Age",
-            "Please enter a valid age between 18 and 100.",
-         );
-         return;
-      }
       try {
          setSaving(true);
-         await authAPI.updateMe({ name: name.trim(), age: parsedAge });
-         // If gender changed, save via onboarding/profile (re-save allowed)
-         if (gender && gender !== user?.gender) {
-            await onboardingAPI.saveProfile({
-               gender,
-               preferences: user?.preferences,
-               lookingFor: user?.lookingFor,
-            });
-         }
-         onSaved({ name: name.trim(), age: parsedAge, gender });
+         await authAPI.updateMe({ name: name.trim() });
+         onSaved({ name: name.trim() });
       } catch (err) {
          Alert.alert("Error", err.response?.data?.message || err.message);
       } finally {
@@ -255,7 +237,7 @@ function EditProfileModal({ visible, user, onClose, onSaved }) {
                </View>
 
                {/* Age */}
-               <View style={ep.section}>
+               {/* <View style={ep.section}>
                   <Text style={ep.sectionLabel}>AGE</Text>
                   <TextInput
                      style={ep.input}
@@ -266,10 +248,10 @@ function EditProfileModal({ visible, user, onClose, onSaved }) {
                      placeholderTextColor={COLORS.textDim}
                      maxLength={3}
                   />
-               </View>
+               </View> */}
 
                {/* Gender */}
-               <View style={ep.section}>
+               {/* <View style={ep.section}>
                   <Text style={ep.sectionLabel}>I AM A</Text>
                   <View style={ep.chipRow}>
                      {GENDERS.map((g) => (
@@ -293,11 +275,12 @@ function EditProfileModal({ visible, user, onClose, onSaved }) {
                         </TouchableOpacity>
                      ))}
                   </View>
-               </View>
+               </View> */}
 
                <Text style={ep.hint}>
-                  Birth details (Nakshatra, Rashi) cannot be changed after
-                  onboarding. Contact support if you need a correction.
+                  Only your display name can be changed. Age, gender and birth
+                  details are permanent. Contact support if you need a
+                  correction.
                </Text>
 
                <View style={{ height: 40 }} />
