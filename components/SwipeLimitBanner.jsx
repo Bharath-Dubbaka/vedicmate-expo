@@ -51,207 +51,199 @@
 
 import { useRef, useEffect } from "react";
 import {
-   View,
-   Text,
-   StyleSheet,
-   TouchableOpacity,
-   Animated,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
 } from "react-native";
-import { COLORS, FONTS, SPACING, RADIUS } from "../constants/theme";
+import { useTheme } from "../context/ThemeContext";
 
 const FREE_DAILY_LIMIT = 15;
 
 export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
-   // Don't render anything for premium users
-   if (isPremium) return null;
-   // Don't render when there's plenty of swipes left
-   if (remaining === null || remaining === undefined) return null;
-   if (remaining > 10) return null;
+  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
 
-   const fadeAnim = useRef(new Animated.Value(0)).current;
-   const shakeAnim = useRef(new Animated.Value(0)).current;
+  if (isPremium) return null;
+  if (remaining === null || remaining === undefined) return null;
+  if (remaining > 10) return null;
 
-   useEffect(() => {
-      Animated.timing(fadeAnim, {
-         toValue: 1,
-         duration: 400,
-         useNativeDriver: true,
-      }).start();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
-      // Shake animation when limit hit
-      if (remaining === 0) {
-         Animated.sequence([
-            Animated.timing(shakeAnim, {
-               toValue: 6,
-               duration: 60,
-               useNativeDriver: true,
-            }),
-            Animated.timing(shakeAnim, {
-               toValue: -6,
-               duration: 60,
-               useNativeDriver: true,
-            }),
-            Animated.timing(shakeAnim, {
-               toValue: 4,
-               duration: 60,
-               useNativeDriver: true,
-            }),
-            Animated.timing(shakeAnim, {
-               toValue: -4,
-               duration: 60,
-               useNativeDriver: true,
-            }),
-            Animated.timing(shakeAnim, {
-               toValue: 0,
-               duration: 60,
-               useNativeDriver: true,
-            }),
-         ]).start();
-      }
-   }, [remaining]);
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+    if (remaining === 0) {
+      Animated.sequence([
+        Animated.timing(shakeAnim, {
+          toValue: 6,
+          duration: 60,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shakeAnim, {
+          toValue: -6,
+          duration: 60,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shakeAnim, {
+          toValue: 4,
+          duration: 60,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shakeAnim, {
+          toValue: -4,
+          duration: 60,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shakeAnim, {
+          toValue: 0,
+          duration: 60,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [remaining]);
 
-   const isLimitReached = remaining === 0;
-   const isLow = remaining <= 3;
+  const isLimitReached = remaining === 0;
+  const isLow = remaining <= 3;
+  const barWidth = `${Math.max(0, (remaining / FREE_DAILY_LIMIT) * 100)}%`;
+  const barColor = isLimitReached
+    ? COLORS.rose
+    : isLow
+    ? "#FB923C"
+    : COLORS.gold;
 
-   const barWidth = `${Math.max(0, (remaining / FREE_DAILY_LIMIT) * 100)}%`;
-   const barColor = isLimitReached
-      ? COLORS.rose
-      : isLow
-        ? "#FB923C" // orange
-        : COLORS.gold;
-
-   return (
-      <Animated.View
-         style={[
-            s.container,
-            isLimitReached && s.containerLimit,
-            {
-               opacity: fadeAnim,
-               transform: [{ translateX: shakeAnim }],
-            },
-         ]}
-      >
-         {isLimitReached ? (
-            // ── Limit reached — full upgrade prompt ────────────────────────────
-            <View style={s.limitReachedContent}>
-               <View style={s.limitTextWrap}>
-                  <Text style={s.limitEmoji}>🌟</Text>
-                  <View>
-                     <Text style={s.limitTitle}>Daily limit reached</Text>
-                     <Text style={s.limitSub}>
-                        Resets at midnight · Upgrade for unlimited swipes
-                     </Text>
-                  </View>
-               </View>
-               <TouchableOpacity
-                  style={s.upgradeBtn}
-                  onPress={onUpgrade}
-                  activeOpacity={0.85}
-               >
-                  <Text style={s.upgradeBtnText}>Upgrade ✨</Text>
-               </TouchableOpacity>
+  return (
+    <Animated.View
+      style={[
+        {
+          marginHorizontal: SPACING.xl,
+          marginBottom: SPACING.sm,
+          backgroundColor: COLORS.bgCard,
+          borderRadius: RADIUS.lg,
+          borderWidth: 1,
+          borderColor: isLimitReached ? COLORS.rose + "50" : COLORS.border,
+          padding: SPACING.md,
+          opacity: fadeAnim,
+          transform: [{ translateX: shakeAnim }],
+        },
+        isLimitReached && { backgroundColor: COLORS.rose + "10" },
+      ]}
+    >
+      {isLimitReached ? (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              flex: 1,
+            }}
+          >
+            <Text style={{ fontSize: 20 }}>🌟</Text>
+            <View>
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: 13,
+                  color: COLORS.textPrimary,
+                  marginBottom: 1,
+                }}
+              >
+                Daily limit reached
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: 11,
+                  color: COLORS.textSecondary,
+                }}
+              >
+                Resets at midnight · Upgrade for unlimited
+              </Text>
             </View>
-         ) : (
-            // ── Low swipes — compact warning bar ──────────────────────────────
-            <View style={s.lowContent}>
-               <View style={s.labelRow}>
-                  <Text style={[s.label, isLow && s.labelLow]}>
-                     {remaining} swipe{remaining !== 1 ? "s" : ""} left today
-                  </Text>
-                  <TouchableOpacity onPress={onUpgrade}>
-                     <Text style={s.upgradeLink}>Get unlimited →</Text>
-                  </TouchableOpacity>
-               </View>
-               <View style={s.barTrack}>
-                  <View
-                     style={[
-                        s.barFill,
-                        { width: barWidth, backgroundColor: barColor },
-                     ]}
-                  />
-               </View>
-            </View>
-         )}
-      </Animated.View>
-   );
+          </View>
+          <TouchableOpacity
+            style={{
+              backgroundColor: COLORS.gold,
+              borderRadius: RADIUS.md,
+              paddingHorizontal: SPACING.md,
+              paddingVertical: SPACING.sm,
+            }}
+            onPress={onUpgrade}
+            activeOpacity={0.85}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.bodyBold,
+                fontSize: 12,
+                color: COLORS.bg,
+              }}
+            >
+              Upgrade ✨
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={{ gap: 6 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.bodyMedium,
+                fontSize: 12,
+                color: isLow ? "#FB923C" : COLORS.textSecondary,
+              }}
+            >
+              {remaining} swipe{remaining !== 1 ? "s" : ""} left today
+            </Text>
+            <TouchableOpacity onPress={onUpgrade}>
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: 11,
+                  color: COLORS.gold,
+                }}
+              >
+                Get unlimited →
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View
+            style={{
+              height: 3,
+              backgroundColor: COLORS.border,
+              borderRadius: 2,
+              overflow: "hidden",
+            }}
+          >
+            <View
+              style={{
+                height: 3,
+                width: barWidth,
+                backgroundColor: barColor,
+                borderRadius: 2,
+              }}
+            />
+          </View>
+        </View>
+      )}
+    </Animated.View>
+  );
 }
-
-const s = StyleSheet.create({
-   container: {
-      marginHorizontal: SPACING.xl,
-      marginBottom: SPACING.sm,
-      backgroundColor: COLORS.bgCard,
-      borderRadius: RADIUS.lg,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-      padding: SPACING.md,
-   },
-   containerLimit: {
-      borderColor: COLORS.rose + "50",
-      backgroundColor: "rgba(232,96,122,0.06)",
-   },
-
-   // Limit reached
-   limitReachedContent: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: SPACING.sm,
-   },
-   limitTextWrap: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.sm,
-      flex: 1,
-   },
-   limitEmoji: { fontSize: 20 },
-   limitTitle: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 13,
-      color: COLORS.textPrimary,
-      marginBottom: 1,
-   },
-   limitSub: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      color: COLORS.textSecondary,
-   },
-   upgradeBtn: {
-      backgroundColor: COLORS.gold,
-      borderRadius: RADIUS.md,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: SPACING.sm,
-      flexShrink: 0,
-   },
-   upgradeBtnText: {
-      fontFamily: FONTS.bodyBold,
-      fontSize: 12,
-      color: COLORS.bg,
-   },
-
-   // Low swipes bar
-   lowContent: { gap: 6 },
-   labelRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-   },
-   label: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 12,
-      color: COLORS.textSecondary,
-   },
-   labelLow: { color: "#FB923C" },
-   upgradeLink: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 11,
-      color: COLORS.gold,
-   },
-   barTrack: {
-      height: 3,
-      backgroundColor: COLORS.border,
-      borderRadius: 2,
-      overflow: "hidden",
-   },
-   barFill: { height: 3, borderRadius: 2 },
-});

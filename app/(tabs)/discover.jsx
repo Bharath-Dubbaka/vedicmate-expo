@@ -1,34 +1,31 @@
 // app/(tabs)/discover.jsx
 import { useEffect, useRef, useCallback, useState } from "react";
 import {
-   View,
-   Text,
-   StyleSheet,
-   TouchableOpacity,
-   Animated,
-   PanResponder,
-   Dimensions,
-   ActivityIndicator,
-   Alert,
-   Modal,
-   ScrollView,
-   Pressable,
-   Image,
+  View,
+  Text,
+  TouchableOpacity,
+  Animated,
+  PanResponder,
+  Dimensions,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Image,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import {
-   fetchProfiles,
-   likeProfile,
-   passProfile,
-   removeProfile,
-   selectProfiles,
-   selectDiscoverLoading,
-   selectIsEmpty,
-   selectSwipeLimitReached,
-   resetSwipeLimit,
+  fetchProfiles,
+  likeProfile,
+  passProfile,
+  removeProfile,
+  selectProfiles,
+  selectDiscoverLoading,
+  selectIsEmpty,
+  selectSwipeLimitReached,
+  resetSwipeLimit,
 } from "../../store/slices/discoverSlice";
 import { addMatch } from "../../store/slices/matchesSlice";
-import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 import { matchingAPI } from "../../services/api";
 import { usePremium } from "../hooks/usePremium";
 import PaywallModal from "./paywall";
@@ -36,1014 +33,736 @@ import SwipeLimitBanner from "../../components/SwipeLimitBanner";
 import CompatibilityModal from "../../components/CompatibilityModal";
 
 const { width, height } = Dimensions.get("window");
-const CARD_WIDTH = width - SPACING.xl * 2;
+const CARD_WIDTH = width - 32 * 2;
 const CARD_HEIGHT = height * 0.72;
 const SWIPE_THRESHOLD = width * 0.35;
 
-// ── Config ─────────────────────────────────────────────────────────────────
-const VERDICT_CONFIG = {
-   "Excellent Match": { color: "#C9A84C", emoji: "🌟", barColor: "#C9A84C" },
-   "Good Match": { color: "#4CAF50", emoji: "💚", barColor: "#4CAF50" },
-   "Average Match": { color: "#7B8CDE", emoji: "💙", barColor: "#7B8CDE" },
-   "Challenging Match": { color: "#FF9800", emoji: "⚠️", barColor: "#FF9800" },
-};
-
-const GANA_CONFIG = {
-   Deva: {
-      color: "#A78BFA",
-      bg: "rgba(167,139,250,0.15)",
-      emoji: "✨",
-      label: "Divine Soul",
-   },
-   Manushya: {
-      color: "#60A5FA",
-      bg: "rgba(96,165,250,0.15)",
-      emoji: "🤝",
-      label: "Human Heart",
-   },
-   Rakshasa: {
-      color: "#F87171",
-      bg: "rgba(248,113,113,0.15)",
-      emoji: "🔥",
-      label: "Fierce Spirit",
-   },
-};
-
 const KOOTA_LIST = [
-   { key: "nadi", name: "Nadi", emoji: "🌊", max: 8 },
-   { key: "bhakoot", name: "Bhakoot", emoji: "🌕", max: 7 },
-   { key: "gana", name: "Gana", emoji: "✨", max: 6 },
-   { key: "grahaMaitri", name: "Graha Maitri", emoji: "🪐", max: 5 },
-   { key: "yoni", name: "Yoni", emoji: "🐾", max: 4 },
-   { key: "tara", name: "Tara", emoji: "⭐", max: 3 },
-   { key: "vashya", name: "Vashya", emoji: "💫", max: 2 },
-   { key: "varna", name: "Varna", emoji: "📿", max: 1 },
+  { key: "nadi", name: "Nadi", emoji: "🌊", max: 8 },
+  { key: "bhakoot", name: "Bhakoot", emoji: "🌕", max: 7 },
+  { key: "gana", name: "Gana", emoji: "✨", max: 6 },
+  { key: "grahaMaitri", name: "Graha Maitri", emoji: "🪐", max: 5 },
+  { key: "yoni", name: "Yoni", emoji: "🐾", max: 4 },
+  { key: "tara", name: "Tara", emoji: "⭐", max: 3 },
+  { key: "vashya", name: "Vashya", emoji: "💫", max: 2 },
+  { key: "varna", name: "Varna", emoji: "📿", max: 1 },
 ];
 
-// ── Swipe Card ──────────────────────────────────────────────────────────────
 function SwipeCard({ profile, onLike, onPass, isTop, onOpenReport }) {
-   const pan = useRef(new Animated.ValueXY()).current;
+  const { COLORS, FONTS, SPACING, RADIUS, GANA_CONFIG, VERDICT_CONFIG } =
+    useTheme();
+  const pan = useRef(new Animated.ValueXY()).current;
 
-   const rotate = pan.x.interpolate({
-      inputRange: [-width / 2, 0, width / 2],
-      outputRange: ["-10deg", "0deg", "10deg"],
-      extrapolate: "clamp",
-   });
-   const likeOpacity = pan.x.interpolate({
-      inputRange: [0, 80],
-      outputRange: [0, 1],
-      extrapolate: "clamp",
-   });
-   const passOpacity = pan.x.interpolate({
-      inputRange: [-80, 0],
-      outputRange: [1, 0],
-      extrapolate: "clamp",
-   });
+  const rotate = pan.x.interpolate({
+    inputRange: [-width / 2, 0, width / 2],
+    outputRange: ["-10deg", "0deg", "10deg"],
+    extrapolate: "clamp",
+  });
+  const likeOpacity = pan.x.interpolate({
+    inputRange: [0, 80],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+  const passOpacity = pan.x.interpolate({
+    inputRange: [-80, 0],
+    outputRange: [1, 0],
+    extrapolate: "clamp",
+  });
 
-   const panResponder = useRef(
-      PanResponder.create({
-         onStartShouldSetPanResponder: () => isTop,
-         onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
-            useNativeDriver: false,
-         }),
-         onPanResponderRelease: (_, gesture) => {
-            if (gesture.dx > SWIPE_THRESHOLD) {
-               Animated.spring(pan, {
-                  toValue: { x: width * 1.5, y: gesture.dy },
-                  useNativeDriver: false,
-               }).start(() => onLike(profile));
-            } else if (gesture.dx < -SWIPE_THRESHOLD) {
-               Animated.spring(pan, {
-                  toValue: { x: -width * 1.5, y: gesture.dy },
-                  useNativeDriver: false,
-               }).start(() => onPass(profile));
-            } else {
-               Animated.spring(pan, {
-                  toValue: { x: 0, y: 0 },
-                  friction: 5,
-                  useNativeDriver: false,
-               }).start();
-            }
-         },
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => isTop,
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
+        useNativeDriver: false,
       }),
-   ).current;
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx > SWIPE_THRESHOLD) {
+          Animated.spring(pan, {
+            toValue: { x: width * 1.5, y: gesture.dy },
+            useNativeDriver: false,
+          }).start(() => onLike(profile));
+        } else if (gesture.dx < -SWIPE_THRESHOLD) {
+          Animated.spring(pan, {
+            toValue: { x: -width * 1.5, y: gesture.dy },
+            useNativeDriver: false,
+          }).start(() => onPass(profile));
+        } else {
+          Animated.spring(pan, {
+            toValue: { x: 0, y: 0 },
+            friction: 5,
+            useNativeDriver: false,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
-   const vc =
-      VERDICT_CONFIG[profile.compatibility.verdict] ||
-      VERDICT_CONFIG["Average Match"];
-   const gc = GANA_CONFIG[profile.user.cosmicCard.gana] || GANA_CONFIG.Manushya;
+  const vc =
+    VERDICT_CONFIG[profile.compatibility.verdict] ||
+    VERDICT_CONFIG["Average Match"];
+  const gc = GANA_CONFIG[profile.user.cosmicCard.gana] || GANA_CONFIG.Manushya;
 
-   return (
-      <Animated.View
-         style={[
-            styles.card,
-            isTop && {
-               transform: [
-                  { translateX: pan.x },
-                  { translateY: pan.y },
-                  { rotate },
-               ],
-               zIndex: 10,
-            },
-         ]}
-         {...(isTop ? panResponder.panHandlers : {})}
+  return (
+    <Animated.View
+      style={[
+        {
+          position: "absolute",
+          width: CARD_WIDTH,
+          height: CARD_HEIGHT,
+          borderRadius: RADIUS.xl,
+          overflow: "hidden",
+          backgroundColor: COLORS.bgCard,
+          shadowColor: COLORS.textPrimary,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.12,
+          shadowRadius: 16,
+          elevation: 12,
+        },
+        isTop && {
+          transform: [{ translateX: pan.x }, { translateY: pan.y }, { rotate }],
+          zIndex: 10,
+        },
+      ]}
+      {...(isTop ? panResponder.panHandlers : {})}
+    >
+      {/* Photo */}
+      <View
+        style={{
+          width: "100%",
+          height: "55%",
+          backgroundColor: gc.bg,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
-         {/* Photo area */}
-         {/* NEW — real photo with fallback */}
-         <View style={[styles.cardPhoto, { backgroundColor: gc.bg }]}>
-            {profile.user.photos?.[0] ? (
-               <Image
-                  source={{ uri: profile.user.photos[0] }}
-                  style={styles.cardPhotoImage}
-                  resizeMode="cover"
-               />
-            ) : (
-               <>
-                  <Text style={styles.photoPlaceholder}>👤</Text>
-                  <Text style={styles.photoNakshatraEmoji}>
-                     {profile.user.cosmicCard.nakshatra?.split(" ")[0] || "🌟"}
-                  </Text>
-               </>
-            )}
-         </View>
-
-         {/* LIKE / PASS labels */}
-         {isTop && (
-            <>
-               <Animated.View
-                  style={[
-                     styles.swipeLabel,
-                     styles.likeLabel,
-                     { opacity: likeOpacity },
-                  ]}
-               >
-                  <Text style={[styles.swipeLabelText, { color: "#4CAF50" }]}>
-                     LIKE ✨
-                  </Text>
-               </Animated.View>
-               <Animated.View
-                  style={[
-                     styles.swipeLabel,
-                     styles.passLabel,
-                     { opacity: passOpacity },
-                  ]}
-               >
-                  <Text style={[styles.swipeLabelText, { color: "#E05C5C" }]}>
-                     PASS
-                  </Text>
-               </Animated.View>
-            </>
-         )}
-
-         {/* Card info overlay - scrollable*/}
-         <ScrollView
-            style={styles.cardInfo}
-            contentContainerStyle={{ paddingBottom: SPACING.md }}
-            showsVerticalScrollIndicator={false}
-            scrollEnabled={isTop}
-            nestedScrollEnabled={true}
-         >
-            {/* <View style={styles.cardInfo}> */}
-            {/* Name + age */}
-            <View style={styles.nameRow}>
-               <Text style={styles.cardName}>
-                  {profile.user.name}, {profile.user.age}
-               </Text>
-               {/* Guna score badge */}
-               <View style={[styles.scoreBadge, { borderColor: vc.color }]}>
-                  <Text style={styles.scoreBadgeEmoji}>{vc.emoji}</Text>
-                  <Text style={[styles.scoreBadgeText, { color: vc.color }]}>
-                     {profile.compatibility.totalScore}/36
-                  </Text>
-               </View>
-            </View>
-
-            {/* ── Cosmic Identity Panel ── */}
-            <View
-               style={[styles.cosmicPanel, { borderColor: gc.color + "40" }]}
-            >
-               {/* Row 1: Nakshatra + Rashi */}
-               <View style={styles.cosmicPanelRow}>
-                  <Text style={styles.cosmicNakshatraSymbol}>
-                     {profile.user.cosmicCard.nakshatra?.split(" ")[0]}
-                  </Text>
-                  <View style={{ flex: 1 }}>
-                     <Text style={styles.cosmicNakshatraName}>
-                        {profile.user.cosmicCard.nakshatra
-                           ?.split(" ")
-                           .slice(1)
-                           .join(" ") || profile.user.cosmicCard.nakshatra}
-                     </Text>
-                     <Text style={styles.cosmicRashi}>
-                        {profile.user.cosmicCard.rashi} Moon · Pada{" "}
-                        {profile.user.cosmicCard.pada}
-                     </Text>
-                  </View>
-                  {/* Gana badge */}
-                  <View style={[styles.ganaBadge, { backgroundColor: gc.bg }]}>
-                     <Text style={styles.ganaEmoji}>{gc.emoji}</Text>
-                     <Text style={[styles.ganaText, { color: gc.color }]}>
-                        {profile.user.cosmicCard.gana}
-                     </Text>
-                  </View>
-               </View>
-
-               {/* Row 2: Animal + Nadi + Varna */}
-               <View style={styles.cosmicTagRow}>
-                  <View style={styles.cosmicTag}>
-                     <Text style={styles.cosmicTagText}>
-                        🐾 {profile.user.cosmicCard.animal}
-                     </Text>
-                  </View>
-                  <View style={styles.cosmicTag}>
-                     <Text style={styles.cosmicTagText}>
-                        🌊 {profile.user.cosmicCard.nadi}
-                     </Text>
-                  </View>
-                  <View style={styles.cosmicTag}>
-                     <Text style={styles.cosmicTagText}>
-                        🪐 {profile.user.cosmicCard.lordPlanet}
-                     </Text>
-                  </View>
-               </View>
-
-               {/* Full koota breakdown — all 8 */}
-               <View style={styles.miniKootas}>
-                  {KOOTA_LIST.map((k) => {
-                     const entry = profile.compatibility.breakdown?.[k.key];
-                     const score = entry?.score ?? 0;
-                     const maxVal = entry?.max ?? k.max;
-                     const barPct = (score / maxVal) * 100;
-                     const barCol =
-                        score === maxVal
-                           ? COLORS.gold
-                           : score === 0
-                             ? "#E05C5C"
-                             : vc.color;
-                     return (
-                        <View key={k.key} style={styles.miniKootaItem}>
-                           <Text style={styles.miniKootaLabel}>
-                              {k.emoji} {k.name}
-                           </Text>
-                           <View style={styles.miniKootaTrack}>
-                              <View
-                                 style={[
-                                    styles.miniKootaFill,
-                                    {
-                                       width: `${barPct}%`,
-                                       backgroundColor: barCol,
-                                    },
-                                 ]}
-                              />
-                           </View>
-                           <Text
-                              style={[styles.miniKootaScore, { color: barCol }]}
-                           >
-                              {score}/{maxVal}
-                           </Text>
-                        </View>
-                     );
-                  })}
-               </View>
-
-               {/* Tap to expand */}
-               <TouchableOpacity
-                  style={styles.expandBtn}
-                  onPress={() => isTop && onOpenReport(profile)}
-                  activeOpacity={0.7}
-               >
-                  <Text style={styles.expandBtnText}>
-                     View full compatibility report ›
-                  </Text>
-               </TouchableOpacity>
-            </View>
-
-            {/* Guna bar */}
-            <View style={styles.gunaBar}>
-               <View style={styles.gunaBarTrack}>
-                  <View
-                     style={[
-                        styles.gunaBarFill,
-                        {
-                           width: `${(profile.compatibility.totalScore / 36) * 100}%`,
-                           backgroundColor: vc.color,
-                        },
-                     ]}
-                  />
-               </View>
-            </View>
-         </ScrollView>
-      </Animated.View>
-   );
-}
-
-// ── Main Discover Screen ────────────────────────────────────────────────────
-export default function DiscoverScreen() {
-   const dispatch = useDispatch();
-   const profiles = useSelector(selectProfiles);
-   const loading = useSelector(selectDiscoverLoading);
-   const isEmpty = useSelector(selectIsEmpty);
-   const swipeLimitReached = useSelector(selectSwipeLimitReached);
-   const [showPaywall, setShowPaywall] = useState(false);
-   const {
-      isPremium,
-      swipesRemaining,
-      swipesAllowed,
-      decrementSwipe,
-      refresh,
-   } = usePremium();
-   const [reportProfile, setReportProfile] = useState(null);
-
-   useEffect(() => {
-      dispatch(fetchProfiles());
-   }, []);
-
-   //This stops refetching when server confirmed 0 results.
-   //Users swipe through all 10, deck empties, one fetch happens, new batch loads. Clean.
-   useEffect(() => {
-      if (!loading && !isEmpty && profiles.length === 0) {
-         dispatch(fetchProfiles());
-      }
-      //stops premature refetch
-   }, [profiles.length, loading, isEmpty]);
-
-   useEffect(() => {
-      if (swipeLimitReached) {
-         setShowPaywall(true);
-         dispatch(resetSwipeLimit());
-      }
-   }, [swipeLimitReached]);
-
-   // When a new card becomes visible, record the view
-   const recordedViews = useRef(new Set());
-
-   useEffect(() => {
-      const id = profiles[0]?.user?.id;
-      if (id && !recordedViews.current.has(id)) {
-         recordedViews.current.add(id);
-         matchingAPI.recordView(id).catch(() => {});
-      }
-   }, [profiles[0]?.user?.id]);
-
-   const handleLike = useCallback(
-      async (profile) => {
-         if (!swipesAllowed && !isPremium) {
-            setShowPaywall(true);
-            return;
-         }
-         decrementSwipe();
-         dispatch(removeProfile(profile.user.id));
-         const result = await dispatch(likeProfile(profile.user.id));
-
-         if (likeProfile.fulfilled.match(result) && result.payload.isMatch) {
-            dispatch(
-               addMatch({
-                  matchId: result.payload.matchId,
-                  matchedAt: new Date().toISOString(),
-                  unreadCount: 0,
-                  user: {
-                     name: profile.user.name,
-                     photo: profile.user.photos?.[0] || null,
-                     cosmicCard: {
-                        nakshatra: profile.user.cosmicCard.nakshatra,
-                     },
-                  },
-                  compatibility: {
-                     gunaScore: profile.compatibility.totalScore,
-                     verdict: profile.compatibility.verdict,
-                  },
-               }),
-            );
-            Alert.alert(
-               "💫 Cosmic Match!",
-               `You and ${profile.user.name} are cosmically connected!\n\n${profile.compatibility.totalScore}/36 Gunas — ${profile.compatibility.verdict}`,
-               [{ text: "Amazing! ✨" }],
-            );
-         }
-      },
-      [dispatch, swipesAllowed, isPremium, decrementSwipe],
-   );
-
-   const handlePass = useCallback(
-      (profile) => {
-         if (!swipesAllowed && !isPremium) {
-            setShowPaywall(true);
-            return;
-         }
-         decrementSwipe();
-         dispatch(removeProfile(profile.user.id));
-         dispatch(passProfile(profile.user.id));
-      },
-      [dispatch, swipesAllowed, isPremium, decrementSwipe],
-   );
-
-   const visibleProfiles = profiles.slice(0, 3);
-
-   return (
-      <View style={styles.container}>
-         {/* Header */}
-         <View style={styles.header}>
-            <Text style={styles.headerLogo}>🔮</Text>
-            <Text style={styles.headerTitle}>DISCOVER</Text>
-         </View>
-         {/* Swipe limit banner — shows remaining swipes for free users */}
-         <SwipeLimitBanner
-            remaining={swipesRemaining}
-            isPremium={isPremium}
-            onUpgrade={() => setShowPaywall(true)}
-         />
-
-         {/* Card Deck */}
-         <View style={styles.deck}>
-            {loading ? (
-               <View style={styles.centerState}>
-                  <ActivityIndicator color={COLORS.gold} size="large" />
-                  <Text style={styles.centerText}>Reading the stars...</Text>
-               </View>
-            ) : isEmpty ? (
-               <View style={styles.centerState}>
-                  <Text style={styles.emptyEmoji}>🌌</Text>
-                  <Text style={styles.emptyTitle}>You've seen everyone!</Text>
-                  <Text style={styles.emptySubtitle}>
-                     Check back later as new cosmic souls join
-                  </Text>
-                  <TouchableOpacity
-                     style={styles.refreshBtn}
-                     onPress={() => dispatch(fetchProfiles())}
-                  >
-                     <Text style={styles.refreshBtnText}>Refresh ✨</Text>
-                  </TouchableOpacity>
-               </View>
-            ) : profiles.length === 0 ? (
-               <View style={styles.centerState}>
-                  <ActivityIndicator color={COLORS.gold} size="large" />
-               </View>
-            ) : (
-               [...visibleProfiles]
-                  .reverse()
-                  .map((profile, i, arr) => (
-                     <SwipeCard
-                        key={profile.user.id}
-                        profile={profile}
-                        onLike={handleLike}
-                        onPass={handlePass}
-                        isTop={i === arr.length - 1}
-                        onOpenReport={setReportProfile}
-                     />
-                  ))
-            )}
-         </View>
-
-         {/* Action buttons */}
-         {!loading && !isEmpty && profiles.length > 0 && (
-            <View style={styles.actions}>
-               <TouchableOpacity
-                  style={[styles.actionBtn, styles.passBtn]}
-                  onPress={() => handlePass(profiles[0])}
-                  activeOpacity={0.8}
-               >
-                  <Text style={styles.passIcon}>✕</Text>
-               </TouchableOpacity>
-
-               <View style={styles.countBadge}>
-                  <Text style={styles.countText}>{profiles.length}</Text>
-                  <Text style={styles.countLabel}>profiles</Text>
-               </View>
-
-               <TouchableOpacity
-                  style={[styles.actionBtn, styles.likeBtn]}
-                  onPress={() => handleLike(profiles[0])}
-                  activeOpacity={0.8}
-               >
-                  <Text style={styles.likeIcon}>✦</Text>
-               </TouchableOpacity>
-            </View>
-         )}
-
-         {/* Compatibility modal */}
-         <CompatibilityModal
-            visible={!!reportProfile}
-            profile={reportProfile}
-            onClose={() => setReportProfile(null)}
-         />
-         <PaywallModal
-            visible={showPaywall}
-            onClose={() => {
-               setShowPaywall(false);
-               refresh();
+        {profile.user.photos?.[0] ? (
+          <Image
+            source={{ uri: profile.user.photos[0] }}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
             }}
-            triggerReason="swipe_limit"
-         />
+            resizeMode="cover"
+          />
+        ) : (
+          <>
+            <Text style={{ fontSize: 80, opacity: 0.4 }}>👤</Text>
+            <Text style={{ fontSize: 36, marginTop: 6 }}>
+              {profile.user.cosmicCard.nakshatra?.split(" ")[0] || "🌟"}
+            </Text>
+          </>
+        )}
       </View>
-   );
+
+      {/* LIKE/PASS overlays */}
+      {isTop && (
+        <>
+          <Animated.View
+            style={{
+              position: "absolute",
+              top: 40,
+              right: 20,
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderWidth: 3,
+              borderRadius: RADIUS.md,
+              borderColor: "#4CAF50",
+              transform: [{ rotate: "-15deg" }],
+              opacity: likeOpacity,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.headingBold,
+                fontSize: 22,
+                letterSpacing: 2,
+                color: "#4CAF50",
+              }}
+            >
+              LIKE ✨
+            </Text>
+          </Animated.View>
+          <Animated.View
+            style={{
+              position: "absolute",
+              top: 40,
+              left: 20,
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderWidth: 3,
+              borderRadius: RADIUS.md,
+              borderColor: "#E05C5C",
+              transform: [{ rotate: "15deg" }],
+              opacity: passOpacity,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.headingBold,
+                fontSize: 22,
+                letterSpacing: 2,
+                color: "#E05C5C",
+              }}
+            >
+              PASS
+            </Text>
+          </Animated.View>
+        </>
+      )}
+
+      {/* Card info — scrollable */}
+      <ScrollView
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          maxHeight: "55%",
+          backgroundColor: COLORS.cardOverlay,
+          paddingHorizontal: SPACING.md,
+          paddingTop: SPACING.sm,
+        }}
+        contentContainerStyle={{ paddingBottom: SPACING.md }}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={isTop}
+        nestedScrollEnabled
+      >
+        {/* Name + score */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: SPACING.sm,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: FONTS.headingBold,
+              fontSize: 22,
+              color: COLORS.textPrimary,
+            }}
+          >
+            {profile.user.name}, {profile.user.age}
+          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 5,
+              borderWidth: 1.5,
+              borderRadius: RADIUS.full,
+              paddingHorizontal: SPACING.sm,
+              paddingVertical: 4,
+              borderColor: vc.color,
+              backgroundColor: "rgba(0,0,0,0.3)",
+            }}
+          >
+            <Text style={{ fontSize: 12 }}>{vc.emoji}</Text>
+            <Text
+              style={{
+                fontFamily: FONTS.bodyBold,
+                fontSize: 14,
+                color: vc.color,
+              }}
+            >
+              {profile.compatibility.totalScore}/36
+            </Text>
+          </View>
+        </View>
+
+        {/* Cosmic panel */}
+        <View
+          style={{
+            borderWidth: 1,
+            borderRadius: RADIUS.lg,
+            padding: SPACING.sm,
+            marginBottom: SPACING.sm,
+            backgroundColor: "rgba(255,255,255,0.04)",
+            borderColor: gc.color + "40",
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: SPACING.sm,
+              marginBottom: SPACING.xs,
+            }}
+          >
+            <Text style={{ fontSize: 28 }}>
+              {profile.user.cosmicCard.nakshatra?.split(" ")[0]}
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: 14,
+                  color: COLORS.textPrimary,
+                  lineHeight: 18,
+                }}
+              >
+                {profile.user.cosmicCard.nakshatra
+                  ?.split(" ")
+                  .slice(1)
+                  .join(" ") || profile.user.cosmicCard.nakshatra}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: 11,
+                  color: COLORS.textSecondary,
+                }}
+              >
+                {profile.user.cosmicCard.rashi} Moon · Pada{" "}
+                {profile.user.cosmicCard.pada}
+              </Text>
+            </View>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: RADIUS.md,
+                backgroundColor: gc.bg,
+              }}
+            >
+              <Text style={{ fontSize: 12 }}>{gc.emoji}</Text>
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: 11,
+                  color: gc.color,
+                }}
+              >
+                {profile.user.cosmicCard.gana}
+              </Text>
+            </View>
+          </View>
+          {/* Tags */}
+          <View
+            style={{
+              flexDirection: "row",
+              gap: SPACING.xs,
+              marginBottom: SPACING.sm,
+              flexWrap: "wrap",
+            }}
+          >
+            {[
+              `🐾 ${profile.user.cosmicCard.animal}`,
+              `🌊 ${profile.user.cosmicCard.nadi}`,
+              `🪐 ${profile.user.cosmicCard.lordPlanet}`,
+            ].map((tag) => (
+              <View
+                key={tag}
+                style={{
+                  backgroundColor: "rgba(255,255,255,0.06)",
+                  borderRadius: RADIUS.sm,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: 11,
+                    color: COLORS.textSecondary,
+                  }}
+                >
+                  {tag}
+                </Text>
+              </View>
+            ))}
+          </View>
+          {/* Koota bars */}
+          <View style={{ gap: 5, marginBottom: SPACING.sm }}>
+            {KOOTA_LIST.map((k) => {
+              const entry = profile.compatibility.breakdown?.[k.key];
+              const score = entry?.score ?? 0;
+              const maxVal = entry?.max ?? k.max;
+              const barColor =
+                score === maxVal
+                  ? COLORS.gold
+                  : score === 0
+                  ? "#E05C5C"
+                  : vc.color;
+              return (
+                <View
+                  key={k.key}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: SPACING.sm,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: 11,
+                      color: COLORS.textSecondary,
+                      width: 80,
+                    }}
+                  >
+                    {k.emoji} {k.name}
+                  </Text>
+                  <View
+                    style={{
+                      flex: 1,
+                      height: 3,
+                      backgroundColor: "rgba(255,255,255,0.08)",
+                      borderRadius: 2,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <View
+                      style={{
+                        height: 3,
+                        width: `${(score / maxVal) * 100}%`,
+                        backgroundColor: barColor,
+                        borderRadius: 2,
+                      }}
+                    />
+                  </View>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyBold,
+                      fontSize: 11,
+                      color: barColor,
+                      width: 28,
+                      textAlign: "right",
+                    }}
+                  >
+                    {score}/{maxVal}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+          <TouchableOpacity
+            style={{ alignItems: "center", paddingVertical: 4 }}
+            onPress={() => isTop && onOpenReport(profile)}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 11,
+                color: COLORS.gold,
+                opacity: 0.8,
+              }}
+            >
+              View full compatibility report ›
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Guna bar */}
+        <View
+          style={{
+            height: 2,
+            backgroundColor: "rgba(255,255,255,0.08)",
+            borderRadius: 1,
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              height: 2,
+              width: `${(profile.compatibility.totalScore / 36) * 100}%`,
+              backgroundColor: vc.color,
+              borderRadius: 1,
+            }}
+          />
+        </View>
+      </ScrollView>
+    </Animated.View>
+  );
 }
 
-// ── Styles ──────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-   container: { flex: 1, backgroundColor: COLORS.bg },
-   header: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: SPACING.xl,
-      paddingTop: 56,
-      paddingBottom: SPACING.md,
-      gap: SPACING.sm,
-   },
-   headerLogo: { fontSize: 22 },
-   headerTitle: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 16,
-      color: COLORS.gold,
-      letterSpacing: 4,
-      flex: 1,
-   },
-   deck: { flex: 1, alignItems: "center", justifyContent: "center" },
-   card: {
-      position: "absolute",
-      width: CARD_WIDTH,
-      height: CARD_HEIGHT,
-      borderRadius: RADIUS.xl,
-      overflow: "hidden",
-      backgroundColor: COLORS.bgCard,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.4,
-      shadowRadius: 16,
-      elevation: 12,
-   },
-   cardPhoto: {
-      width: "100%",
-      height: "55%",
-      alignItems: "center",
-      justifyContent: "center",
-   },
-   cardPhotoImage: {
-      width: "100%",
-      height: "100%",
-      position: "absolute",
-      top: 0,
-      left: 0,
-   },
-   photoPlaceholder: { fontSize: 80, opacity: 0.4 },
-   photoNakshatraEmoji: { fontSize: 36, marginTop: 6 },
-   swipeLabel: {
-      position: "absolute",
-      top: 40,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderWidth: 3,
-      borderRadius: RADIUS.md,
-   },
-   likeLabel: {
-      right: 20,
-      borderColor: "#4CAF50",
-      transform: [{ rotate: "-15deg" }],
-   },
-   passLabel: {
-      left: 20,
-      borderColor: "#E05C5C",
-      transform: [{ rotate: "15deg" }],
-   },
-   swipeLabelText: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 22,
-      letterSpacing: 2,
-   },
+export default function DiscoverScreen() {
+  const dispatch = useDispatch();
+  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const profiles = useSelector(selectProfiles);
+  const loading = useSelector(selectDiscoverLoading);
+  const isEmpty = useSelector(selectIsEmpty);
+  const swipeLimitReached = useSelector(selectSwipeLimitReached);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [reportProfile, setReportProfile] = useState(null);
+  const { isPremium, swipesRemaining, swipesAllowed, decrementSwipe, refresh } =
+    usePremium();
 
-   // ── Card info ──
-   cardInfo: {
-      position: "absolute",
-      bottom: 0,
-      left: 0,
-      right: 0,
-      maxHeight: "55%",
-      backgroundColor: "rgba(10,11,20,0.92)",
-      paddingHorizontal: SPACING.md,
-      paddingTop: SPACING.sm,
-   },
-   nameRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: SPACING.sm,
-   },
-   cardName: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 22,
-      color: COLORS.textPrimary,
-   },
-   scoreBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      borderWidth: 1.5,
-      borderRadius: RADIUS.full,
-      paddingHorizontal: SPACING.sm,
-      paddingVertical: 4,
-      backgroundColor: "rgba(0,0,0,0.4)",
-   },
-   scoreBadgeEmoji: { fontSize: 12 },
-   scoreBadgeText: { fontFamily: FONTS.bodyBold, fontSize: 14 },
+  useEffect(() => {
+    dispatch(fetchProfiles());
+  }, []);
+  useEffect(() => {
+    if (!loading && !isEmpty && profiles.length === 0)
+      dispatch(fetchProfiles());
+  }, [profiles.length, loading, isEmpty]);
+  useEffect(() => {
+    if (swipeLimitReached) {
+      setShowPaywall(true);
+      dispatch(resetSwipeLimit());
+    }
+  }, [swipeLimitReached]);
 
-   // ── Cosmic panel ──
-   cosmicPanel: {
-      borderWidth: 1,
-      borderRadius: RADIUS.lg,
-      padding: SPACING.sm,
-      marginBottom: SPACING.sm,
-      backgroundColor: "rgba(255,255,255,0.04)",
-   },
-   cosmicPanelRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.sm,
-      marginBottom: SPACING.xs,
-   },
-   cosmicNakshatraSymbol: { fontSize: 28 },
-   cosmicNakshatraName: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 14,
-      color: COLORS.textPrimary,
-      lineHeight: 18,
-   },
-   cosmicRashi: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      color: COLORS.textSecondary,
-   },
-   ganaBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: RADIUS.md,
-   },
-   ganaEmoji: { fontSize: 12 },
-   ganaText: { fontFamily: FONTS.bodyMedium, fontSize: 11 },
-   cosmicTagRow: {
-      flexDirection: "row",
-      gap: SPACING.xs,
-      marginBottom: SPACING.sm,
-      flexWrap: "wrap",
-   },
-   cosmicTag: {
-      backgroundColor: "rgba(255,255,255,0.06)",
-      borderRadius: RADIUS.sm,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-   },
-   cosmicTagText: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      color: COLORS.textSecondary,
-   },
+  const recordedViews = useRef(new Set());
+  useEffect(() => {
+    const id = profiles[0]?.user?.id;
+    if (id && !recordedViews.current.has(id)) {
+      recordedViews.current.add(id);
+      matchingAPI.recordView(id).catch(() => {});
+    }
+  }, [profiles[0]?.user?.id]);
 
-   // ── Mini koota bars ──
-   miniKootas: { gap: 5, marginBottom: SPACING.sm },
-   miniKootaItem: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.sm,
-   },
-   miniKootaLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      color: COLORS.textSecondary,
-      width: 80,
-   },
-   miniKootaTrack: {
-      flex: 1,
-      height: 3,
-      backgroundColor: "rgba(255,255,255,0.08)",
-      borderRadius: 2,
-      overflow: "hidden",
-   },
-   miniKootaFill: { height: 3, borderRadius: 2 },
-   miniKootaScore: {
-      fontFamily: FONTS.bodyBold,
-      fontSize: 11,
-      width: 28,
-      textAlign: "right",
-   },
+  const handleLike = useCallback(
+    async (profile) => {
+      if (!swipesAllowed && !isPremium) {
+        setShowPaywall(true);
+        return;
+      }
+      decrementSwipe();
+      dispatch(removeProfile(profile.user.id));
+      const result = await dispatch(likeProfile(profile.user.id));
+      if (likeProfile.fulfilled.match(result) && result.payload.isMatch) {
+        dispatch(
+          addMatch({
+            matchId: result.payload.matchId,
+            matchedAt: new Date().toISOString(),
+            unreadCount: 0,
+            user: {
+              name: profile.user.name,
+              photo: profile.user.photos?.[0] || null,
+              cosmicCard: { nakshatra: profile.user.cosmicCard.nakshatra },
+            },
+            compatibility: {
+              gunaScore: profile.compatibility.totalScore,
+              verdict: profile.compatibility.verdict,
+            },
+          })
+        );
+        Alert.alert(
+          "💫 Cosmic Match!",
+          `You and ${profile.user.name} are cosmically connected!\n\n${profile.compatibility.totalScore}/36 Gunas — ${profile.compatibility.verdict}`,
+          [{ text: "Amazing! ✨" }]
+        );
+      }
+    },
+    [dispatch, swipesAllowed, isPremium, decrementSwipe]
+  );
 
-   expandBtn: {
-      alignItems: "center",
-      paddingVertical: 4,
-   },
-   expandBtnText: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      color: COLORS.gold,
-      opacity: 0.8,
-   },
+  const handlePass = useCallback(
+    (profile) => {
+      if (!swipesAllowed && !isPremium) {
+        setShowPaywall(true);
+        return;
+      }
+      decrementSwipe();
+      dispatch(removeProfile(profile.user.id));
+      dispatch(passProfile(profile.user.id));
+    },
+    [dispatch, swipesAllowed, isPremium, decrementSwipe]
+  );
 
-   gunaBar: { marginTop: 2 },
-   gunaBarTrack: {
-      height: 2,
-      backgroundColor: "rgba(255,255,255,0.08)",
-      borderRadius: 1,
-      overflow: "hidden",
-   },
-   gunaBarFill: { height: 2, borderRadius: 1 },
+  const visibleProfiles = profiles.slice(0, 3);
 
-   // ── Actions ──
-   actions: {
-      flexDirection: "row",
-      justifyContent: "center",
-      alignItems: "center",
-      gap: SPACING.xl,
-      paddingVertical: SPACING.lg,
-      paddingBottom: SPACING.xl,
-   },
-   actionBtn: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      alignItems: "center",
-      justifyContent: "center",
-      elevation: 8,
-   },
-   passBtn: {
-      backgroundColor: COLORS.bgElevated,
-      borderWidth: 2,
-      borderColor: "#E05C5C",
-   },
-   likeBtn: { backgroundColor: COLORS.gold, elevation: 12 },
-   passIcon: { fontSize: 24, color: "#E05C5C" },
-   likeIcon: { fontSize: 24, color: COLORS.bg },
-   countBadge: { alignItems: "center" },
-   countText: { fontFamily: FONTS.bodyBold, fontSize: 20, color: COLORS.gold },
-   countLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 10,
-      color: COLORS.textDim,
-      letterSpacing: 1,
-   },
+  return (
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: SPACING.xl,
+          paddingTop: 56,
+          paddingBottom: SPACING.md,
+          gap: SPACING.sm,
+        }}
+      >
+        <Text style={{ fontSize: 22 }}>🔮</Text>
+        <Text
+          style={{
+            fontFamily: FONTS.headingBold,
+            fontSize: 16,
+            color: COLORS.gold,
+            letterSpacing: 4,
+            flex: 1,
+          }}
+        >
+          DISCOVER
+        </Text>
+      </View>
 
-   // ── Empty / loading states ──
-   centerState: { alignItems: "center", paddingHorizontal: SPACING.xl },
-   centerText: {
-      fontFamily: FONTS.body,
-      fontSize: 15,
-      color: COLORS.textSecondary,
-      marginTop: SPACING.md,
-   },
-   emptyEmoji: { fontSize: 64, marginBottom: SPACING.md },
-   emptyTitle: {
-      fontFamily: FONTS.heading,
-      fontSize: 22,
-      color: COLORS.textPrimary,
-      marginBottom: SPACING.sm,
-   },
-   emptySubtitle: {
-      fontFamily: FONTS.body,
-      fontSize: 14,
-      color: COLORS.textSecondary,
-      textAlign: "center",
-      marginBottom: SPACING.xl,
-   },
-   refreshBtn: {
-      borderWidth: 1,
-      borderColor: COLORS.gold,
-      borderRadius: RADIUS.full,
-      paddingHorizontal: SPACING.xl,
-      paddingVertical: SPACING.md,
-   },
-   refreshBtnText: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 14,
-      color: COLORS.gold,
-   },
-});
+      <SwipeLimitBanner
+        remaining={swipesRemaining}
+        isPremium={isPremium}
+        onUpgrade={() => setShowPaywall(true)}
+      />
 
-// ── Modal styles ─────────────────────────────────────────────────────────────
-// const modal = StyleSheet.create({
-//    container: { flex: 1, backgroundColor: COLORS.bg },
-//    handle: {
-//       width: 40,
-//       height: 4,
-//       backgroundColor: COLORS.border,
-//       borderRadius: 2,
-//       alignSelf: "center",
-//       marginTop: 12,
-//       marginBottom: 4,
-//    },
-//    scroll: { padding: SPACING.xl },
-//    header: {
-//       flexDirection: "row",
-//       justifyContent: "space-between",
-//       alignItems: "flex-start",
-//       marginBottom: SPACING.lg,
-//    },
-//    headerLeft: { flex: 1, marginRight: SPACING.md },
-//    personName: {
-//       fontFamily: FONTS.headingBold,
-//       fontSize: 22,
-//       color: COLORS.textPrimary,
-//       marginBottom: 2,
-//    },
-//    personSub: {
-//       fontFamily: FONTS.body,
-//       fontSize: 13,
-//       color: COLORS.textSecondary,
-//    },
-//    verdictBadge: {
-//       flexDirection: "row",
-//       alignItems: "center",
-//       gap: SPACING.sm,
-//       borderWidth: 1.5,
-//       borderRadius: RADIUS.lg,
-//       paddingHorizontal: SPACING.md,
-//       paddingVertical: SPACING.sm,
-//       backgroundColor: "rgba(0,0,0,0.3)",
-//    },
-//    verdictEmoji: { fontSize: 18 },
-//    verdictScore: { fontFamily: FONTS.bodyBold, fontSize: 16 },
-//    verdictLabel: { fontFamily: FONTS.body, fontSize: 11 },
+      {/* Deck */}
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        {loading ? (
+          <View style={{ alignItems: "center" }}>
+            <ActivityIndicator color={COLORS.gold} size="large" />
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 15,
+                color: COLORS.textSecondary,
+                marginTop: SPACING.md,
+              }}
+            >
+              Reading the stars...
+            </Text>
+          </View>
+        ) : isEmpty ? (
+          <View style={{ alignItems: "center", paddingHorizontal: SPACING.xl }}>
+            <Text style={{ fontSize: 64, marginBottom: SPACING.md }}>🌌</Text>
+            <Text
+              style={{
+                fontFamily: FONTS.heading,
+                fontSize: 22,
+                color: COLORS.textPrimary,
+                marginBottom: SPACING.sm,
+              }}
+            >
+              You've seen everyone!
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 14,
+                color: COLORS.textSecondary,
+                textAlign: "center",
+                marginBottom: SPACING.xl,
+              }}
+            >
+              Check back later as new cosmic souls join
+            </Text>
+            <TouchableOpacity
+              style={{
+                borderWidth: 1,
+                borderColor: COLORS.gold,
+                borderRadius: RADIUS.full,
+                paddingHorizontal: SPACING.xl,
+                paddingVertical: SPACING.md,
+              }}
+              onPress={() => dispatch(fetchProfiles())}
+            >
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: 14,
+                  color: COLORS.gold,
+                }}
+              >
+                Refresh ✨
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : profiles.length === 0 ? (
+          <ActivityIndicator color={COLORS.gold} size="large" />
+        ) : (
+          [...visibleProfiles]
+            .reverse()
+            .map((profile, i, arr) => (
+              <SwipeCard
+                key={profile.user.id}
+                profile={profile}
+                onLike={handleLike}
+                onPass={handlePass}
+                isTop={i === arr.length - 1}
+                onOpenReport={setReportProfile}
+              />
+            ))
+        )}
+      </View>
 
-//    scoreHero: { alignItems: "center", marginBottom: SPACING.xl },
-//    scoreCircle: {
-//       width: 96,
-//       height: 96,
-//       borderRadius: 48,
-//       borderWidth: 2.5,
-//       alignItems: "center",
-//       justifyContent: "center",
-//       marginBottom: SPACING.md,
-//       backgroundColor: "rgba(255,255,255,0.03)",
-//    },
-//    scoreNumber: { fontFamily: FONTS.headingBold, fontSize: 26 },
-//    scoreLabel: {
-//       fontFamily: FONTS.body,
-//       fontSize: 11,
-//       color: COLORS.textSecondary,
-//    },
-//    cosmicIdentity: { alignItems: "center", gap: SPACING.sm, width: "100%" },
-//    ganaChip: {
-//       flexDirection: "row",
-//       alignItems: "center",
-//       gap: 6,
-//       paddingHorizontal: SPACING.md,
-//       paddingVertical: 6,
-//       borderRadius: RADIUS.full,
-//       borderWidth: 1,
-//    },
-//    ganaChipEmoji: { fontSize: 14 },
-//    ganaChipText: { fontFamily: FONTS.bodyMedium, fontSize: 13 },
-//    cosmicDetails: {
-//       flexDirection: "row",
-//       alignItems: "center",
-//       gap: SPACING.sm,
-//    },
-//    cosmicDetail: {
-//       fontFamily: FONTS.body,
-//       fontSize: 13,
-//       color: COLORS.textSecondary,
-//    },
-//    cosmicDetailDot: {
-//       color: COLORS.textDim,
-//       fontSize: 13,
-//    },
+      {/* Action buttons */}
+      {!loading && !isEmpty && profiles.length > 0 && (
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: SPACING.xl,
+            paddingVertical: SPACING.lg,
+            paddingBottom: SPACING.xl,
+          }}
+        >
+          <TouchableOpacity
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              alignItems: "center",
+              justifyContent: "center",
+              elevation: 8,
+              backgroundColor: COLORS.bgElevated,
+              borderWidth: 2,
+              borderColor: "#E05C5C",
+            }}
+            onPress={() => handlePass(profiles[0])}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontSize: 24, color: "#E05C5C" }}>✕</Text>
+          </TouchableOpacity>
+          <View style={{ alignItems: "center" }}>
+            <Text
+              style={{
+                fontFamily: FONTS.bodyBold,
+                fontSize: 20,
+                color: COLORS.gold,
+              }}
+            >
+              {profiles.length}
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 10,
+                color: COLORS.textDim,
+                letterSpacing: 1,
+              }}
+            >
+              profiles
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: COLORS.gold,
+              elevation: 12,
+            }}
+            onPress={() => handleLike(profiles[0])}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontSize: 24, color: COLORS.bg }}>✦</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-//    sectionTitle: {
-//       fontFamily: FONTS.body,
-//       fontSize: 10,
-//       color: COLORS.textDim,
-//       letterSpacing: 3,
-//       marginBottom: SPACING.sm,
-//    },
-
-//    // Koota breakdown card
-//    kootaCard: {
-//       backgroundColor: COLORS.bgCard,
-//       borderRadius: RADIUS.xl,
-//       borderWidth: 1,
-//       borderColor: COLORS.border,
-//       marginBottom: SPACING.xl,
-//       overflow: "hidden",
-//    },
-//    kootaRow: {
-//       flexDirection: "row",
-//       alignItems: "center",
-//       gap: SPACING.sm,
-//       paddingHorizontal: SPACING.md,
-//       paddingVertical: 10,
-//    },
-//    kootaRowBorder: {
-//       borderBottomWidth: 1,
-//       borderBottomColor: COLORS.border,
-//    },
-//    kootaEmoji: { fontSize: 16, width: 22 },
-//    kootaTopRow: {
-//       flexDirection: "row",
-//       justifyContent: "space-between",
-//       alignItems: "center",
-//       marginBottom: 5,
-//    },
-//    kootaName: {
-//       fontFamily: FONTS.bodyMedium,
-//       fontSize: 13,
-//       color: COLORS.textPrimary,
-//    },
-//    kootaScore: {
-//       fontFamily: FONTS.bodyBold,
-//       fontSize: 13,
-//       color: COLORS.textSecondary,
-//    },
-//    kootaBarTrack: {
-//       height: 4,
-//       backgroundColor: COLORS.border,
-//       borderRadius: 2,
-//       overflow: "hidden",
-//    },
-//    kootaBarFill: { height: 4, borderRadius: 2 },
-
-//    // Doshas
-//    doshaCard: {
-//       backgroundColor: COLORS.bgCard,
-//       borderRadius: RADIUS.xl,
-//       borderWidth: 1,
-//       borderColor: "#FF980040",
-//       marginBottom: SPACING.xl,
-//       overflow: "hidden",
-//    },
-//    doshaRow: {
-//       flexDirection: "row",
-//       gap: SPACING.sm,
-//       padding: SPACING.md,
-//    },
-//    doshaRowBorder: {
-//       borderBottomWidth: 1,
-//       borderBottomColor: COLORS.border,
-//    },
-//    doshaBadge: { paddingTop: 2 },
-//    doshaBadgeText: { fontSize: 16 },
-//    doshaName: {
-//       fontFamily: FONTS.bodyMedium,
-//       fontSize: 13,
-//       color: COLORS.textPrimary,
-//       marginBottom: 2,
-//    },
-//    doshaDesc: {
-//       fontFamily: FONTS.body,
-//       fontSize: 12,
-//       color: COLORS.textSecondary,
-//       lineHeight: 18,
-//    },
-//    doshaCancelled: {
-//       fontFamily: FONTS.body,
-//       fontSize: 11,
-//       color: "#4CAF50",
-//       marginTop: 4,
-//    },
-
-//    // Highlights / strengths
-//    highlightsRow: {
-//       flexDirection: "row",
-//       flexWrap: "wrap",
-//       gap: SPACING.sm,
-//       marginBottom: SPACING.xl,
-//    },
-//    strengthChip: {
-//       flex: 1,
-//       minWidth: "44%",
-//       backgroundColor: COLORS.bgCard,
-//       borderRadius: RADIUS.lg,
-//       borderWidth: 1,
-//       borderColor: COLORS.border,
-//       padding: SPACING.md,
-//       alignItems: "center",
-//    },
-//    strengthScore: {
-//       fontFamily: FONTS.headingBold,
-//       fontSize: 18,
-//       color: COLORS.textSecondary,
-//       marginBottom: 2,
-//    },
-//    strengthName: {
-//       fontFamily: FONTS.body,
-//       fontSize: 11,
-//       color: COLORS.textDim,
-//    },
-
-//    // Footer
-//    footer: {
-//       padding: SPACING.xl,
-//       paddingBottom: 40,
-//       borderTopWidth: 1,
-//       borderTopColor: COLORS.border,
-//    },
-//    closeBtn: {
-//       borderWidth: 1,
-//       borderColor: COLORS.border,
-//       borderRadius: RADIUS.lg,
-//       paddingVertical: SPACING.md,
-//       alignItems: "center",
-//    },
-//    closeBtnText: {
-//       fontFamily: FONTS.bodyMedium,
-//       fontSize: 15,
-//       color: COLORS.textSecondary,
-//    },
-// });
+      <CompatibilityModal
+        visible={!!reportProfile}
+        profile={reportProfile}
+        onClose={() => setReportProfile(null)}
+      />
+      <PaywallModal
+        visible={showPaywall}
+        onClose={() => {
+          setShowPaywall(false);
+          refresh();
+        }}
+        triggerReason="swipe_limit"
+      />
+    </View>
+  );
+}

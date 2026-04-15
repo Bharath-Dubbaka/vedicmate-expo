@@ -13,107 +13,103 @@
 //       Your actual IP (192.168.x.x) = for physical device on same WiFi
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Added: matchingAPI.report(), matchingAPI.getPassedByMe()
+// Fixed: authAPI.deletePhoto() now passes photoUrl correctly
+
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// ── Base URL ──────────────────────────────────────────────────────────────────
-// EXPO_PUBLIC_ prefix makes env vars available in Expo (like REACT_APP_ in CRA)
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://10.0.2.2:5000/api";
 console.log("[API] Base URL:", BASE_URL);
 
-// ── Create Axios instance ─────────────────────────────────────────────────────
 const api = axios.create({
-   baseURL: BASE_URL,
-   timeout: 15000,
-   headers: { "Content-Type": "application/json" },
+  baseURL: BASE_URL,
+  timeout: 15000,
+  headers: { "Content-Type": "application/json" },
 });
 
-// ── Request Interceptor: attach JWT to every request ─────────────────────────
-// This is the equivalent of adding Authorization header manually each time
-// The interceptor runs BEFORE every request automatically
 api.interceptors.request.use(
-   async (config) => {
-      const token = await AsyncStorage.getItem("token");
-      if (token) {
-         config.headers.Authorization = `Bearer ${token}`;
-      }
-      console.log(
-         `[API REQUEST] ${config.method?.toUpperCase()} ${config.url}`,
-      );
-      return config;
-   },
-   (error) => {
-      console.error("[API REQUEST ERROR]", error.message);
-      return Promise.reject(error);
-   },
+  async (config) => {
+    const token = await AsyncStorage.getItem("token");
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    console.log(`[API REQUEST] ${config.method?.toUpperCase()} ${config.url}`);
+    return config;
+  },
+  (error) => {
+    console.error("[API REQUEST ERROR]", error.message);
+    return Promise.reject(error);
+  }
 );
 
-// ── Response Interceptor: handle 401 globally ────────────────────────────────
 api.interceptors.response.use(
-   (res) => {
-      console.log(`[API RESPONSE] ${res.status} ${res.config.url}`);
-      return res;
-   },
-   async (err) => {
-      const status = err.response?.status;
-      const url = err.config?.url;
-      console.error(
-         `[API ERROR] ${status} ${url} — ${err.response?.data?.message || err.message}`,
-      );
-      if (status === 401) {
-         // Token expired or invalid — clear storage
-         // The NavigationGuard in _layout.jsx will handle redirect to login
-         console.log("[API] 401 received — clearing auth tokens");
-         await AsyncStorage.multiRemove(["token", "user"]);
-      }
-      return Promise.reject(err);
-   },
+  (res) => {
+    console.log(`[API RESPONSE] ${res.status} ${res.config.url}`);
+    return res;
+  },
+  async (err) => {
+    const status = err.response?.status;
+    const url = err.config?.url;
+    console.error(
+      `[API ERROR] ${status} ${url} — ${
+        err.response?.data?.message || err.message
+      }`
+    );
+    if (status === 401) {
+      console.log("[API] 401 received — clearing auth tokens");
+      await AsyncStorage.multiRemove(["token", "user"]);
+    }
+    return Promise.reject(err);
+  }
 );
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authAPI = {
-   register: (data) => api.post("/auth/register", data),
-   login: (data) => api.post("/auth/login", data),
-   getMe: () => api.get("/auth/me"),
-   savePushToken: (pushToken) => api.patch("/auth/push-token", { pushToken }),
-   updateMe: (data) => api.patch("/auth/me", data), // ← bio + future fields
-   googleAuth: (data) => api.post("/auth/google", data),
-   uploadPhoto: (formData) =>
-      api.post("/auth/photos", formData, {
-         headers: { "Content-Type": "multipart/form-data" },
-         timeout: 30000, // photo uploads can be slow on mobile
-      }),
-   deletePhoto: () => api.delete("/auth/photos"),
+  register: (data) => api.post("/auth/register", data),
+  login: (data) => api.post("/auth/login", data),
+  getMe: () => api.get("/auth/me"),
+  savePushToken: (pushToken) => api.patch("/auth/push-token", { pushToken }),
+  updateMe: (data) => api.patch("/auth/me", data),
+  googleAuth: (data) => api.post("/auth/google", data),
+  uploadPhoto: (formData) =>
+    api.post("/auth/photos", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 30000,
+    }),
+  // Fixed: pass photoUrl in body, correct endpoint
+  deletePhoto: (photoUrl) => api.delete("/auth/photo", { data: { photoUrl } }),
 };
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
 export const onboardingAPI = {
-   saveBirthDetails: (data) => api.post("/onboarding/birth-details", data),
-   saveProfile: (data) => api.post("/onboarding/profile", data),
-   complete: () => api.post("/onboarding/complete"),
-   getCosmicProfile: () => api.get("/onboarding/cosmic-profile"),
+  saveBirthDetails: (data) => api.post("/onboarding/birth-details", data),
+  saveProfile: (data) => api.post("/onboarding/profile", data),
+  complete: () => api.post("/onboarding/complete"),
+  getCosmicProfile: () => api.get("/onboarding/cosmic-profile"),
 };
 
 // ── Matching ──────────────────────────────────────────────────────────────────
 export const matchingAPI = {
-   discover: (params) => api.get("/matching/discover", { params }),
-   getCompatibility: (userId) => api.get(`/matching/compatibility/${userId}`),
-   like: (userId) => api.post(`/matching/like/${userId}`),
-   pass: (userId) => api.post(`/matching/pass/${userId}`),
-   getMatches: () => api.get("/matching/matches"),
-   recordView: (userId) => api.post(`/matching/view/${userId}`),
-   getViewedMe: () => api.get("/matching/viewed-me"),
-   getViewedByMe: () => api.get("/matching/viewed-by-me"),
-   getLikedByMe: () => api.get("/matching/liked-by-me"),
-   getLikedMe: () => api.get("/matching/liked-me"),
-   unmatch: (matchId) => api.delete(`/matching/unmatch/${matchId}`),
+  discover: (params) => api.get("/matching/discover", { params }),
+  getCompatibility: (userId) => api.get(`/matching/compatibility/${userId}`),
+  like: (userId) => api.post(`/matching/like/${userId}`),
+  pass: (userId) => api.post(`/matching/pass/${userId}`),
+  getMatches: () => api.get("/matching/matches"),
+  recordView: (userId) => api.post(`/matching/view/${userId}`),
+  getViewedMe: () => api.get("/matching/viewed-me"),
+  getViewedByMe: () => api.get("/matching/viewed-by-me"),
+  getLikedByMe: () => api.get("/matching/liked-by-me"),
+  getLikedMe: () => api.get("/matching/liked-me"),
+  getPassedByMe: () => api.get("/matching/passed-by-me"), // NEW — swipe history passed tab
+  unmatch: (matchId) => api.delete(`/matching/unmatch/${matchId}`),
+  report: (userId, reason) =>
+    api.post(`/matching/report/${userId}`, { reason }), // NEW — block/report
 };
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 export const chatAPI = {
-   getMessages: (matchId, params) =>
-      api.get(`/chat/${matchId}/messages`, { params }),
-   sendMessage: (matchId, data) => api.post(`/chat/${matchId}/messages`, data),
+  getMessages: (matchId, params) =>
+    api.get(`/chat/${matchId}/messages`, { params }),
+  sendMessage: (matchId, data) => api.post(`/chat/${matchId}/messages`, data),
 };
 
 export default api;

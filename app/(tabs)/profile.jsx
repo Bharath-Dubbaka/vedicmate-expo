@@ -3,1569 +3,1857 @@
 // Profile screen with editable name, age, bio, and preferences.
 // Users can tap "Edit Profile" to update their basic info after signup.
 
-import { useState, useRef } from "react";
+import { useState, useCallback } from "react";
 import {
-   View,
-   Text,
-   StyleSheet,
-   ScrollView,
-   TouchableOpacity,
-   Alert,
-   Modal,
-   TextInput,
-   ActivityIndicator,
-   Switch,
-   Image,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  Switch,
+  Image,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { useDispatch, useSelector } from "react-redux";
 import { logout, updateUser, selectUser } from "../../store/slices/authSlice";
 import { disconnectSocket } from "../../services/socket";
 import { onboardingAPI, authAPI } from "../../services/api";
-import { COLORS, FONTS, SPACING, RADIUS } from "../../constants/theme";
+import { useTheme } from "../../context/ThemeContext";
 import { usePremium } from "../hooks/usePremium";
 import PaywallModal from "./paywall";
+import ThemeToggle from "../../components/ThemeToggle";
 import { useFocusEffect } from "expo-router";
-import { useCallback } from "react";
 import * as ImagePicker from "expo-image-picker";
 
-const GANA_CONFIG = {
-   Deva: {
-      color: "#A78BFA",
-      emoji: "✨",
-      title: "Divine Soul",
-      bg: "rgba(167,139,250,0.12)",
-   },
-   Manushya: {
-      color: "#60A5FA",
-      emoji: "🤝",
-      title: "Human Heart",
-      bg: "rgba(96,165,250,0.12)",
-   },
-   Rakshasa: {
-      color: "#F87171",
-      emoji: "🔥",
-      title: "Fierce Spirit",
-      bg: "rgba(248,113,113,0.12)",
-   },
-};
-
 const KOOTA_INFO = [
-   {
-      key: "nadi",
-      name: "Nadi",
-      emoji: "🌊",
-      max: 8,
-      desc: "Health & genetics",
-   },
-   {
-      key: "bhakoot",
-      name: "Bhakoot",
-      emoji: "🌕",
-      max: 7,
-      desc: "Emotional compatibility",
-   },
-   { key: "gana", name: "Gana", emoji: "✨", max: 6, desc: "Temperament" },
-   {
-      key: "grahaMaitri",
-      name: "Graha Maitri",
-      emoji: "🪐",
-      max: 5,
-      desc: "Mental compatibility",
-   },
-   {
-      key: "yoni",
-      name: "Yoni",
-      emoji: "🐾",
-      max: 4,
-      desc: "Physical compatibility",
-   },
-   {
-      key: "tara",
-      name: "Tara",
-      emoji: "⭐",
-      max: 3,
-      desc: "Birth star harmony",
-   },
-   {
-      key: "vashya",
-      name: "Vashya",
-      emoji: "💫",
-      max: 2,
-      desc: "Mutual attraction",
-   },
-   {
-      key: "varna",
-      name: "Varna",
-      emoji: "📿",
-      max: 1,
-      desc: "Spiritual compatibility",
-   },
+  { key: "nadi", name: "Nadi", emoji: "🌊", max: 8, desc: "Health & genetics" },
+  {
+    key: "bhakoot",
+    name: "Bhakoot",
+    emoji: "🌕",
+    max: 7,
+    desc: "Emotional compatibility",
+  },
+  { key: "gana", name: "Gana", emoji: "✨", max: 6, desc: "Temperament" },
+  {
+    key: "grahaMaitri",
+    name: "Graha Maitri",
+    emoji: "🪐",
+    max: 5,
+    desc: "Mental compatibility",
+  },
+  {
+    key: "yoni",
+    name: "Yoni",
+    emoji: "🐾",
+    max: 4,
+    desc: "Physical compatibility",
+  },
+  {
+    key: "tara",
+    name: "Tara",
+    emoji: "⭐",
+    max: 3,
+    desc: "Birth star harmony",
+  },
+  {
+    key: "vashya",
+    name: "Vashya",
+    emoji: "💫",
+    max: 2,
+    desc: "Mutual attraction",
+  },
+  {
+    key: "varna",
+    name: "Varna",
+    emoji: "📿",
+    max: 1,
+    desc: "Spiritual compatibility",
+  },
 ];
 
-// ── Inline bio editor ─────────────────────────────────────────────────────────
 function BioSection({ bio, onSaved }) {
-   const [editing, setEditing] = useState(false);
-   const [value, setValue] = useState(bio || "");
-   const [saving, setSaving] = useState(false);
+  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(bio || "");
+  const [saving, setSaving] = useState(false);
 
-   const handleSave = async () => {
-      if (value.trim() === (bio || "").trim()) {
-         setEditing(false);
-         return;
-      }
-      try {
-         setSaving(true);
-         await authAPI.updateMe({ bio: value.trim().slice(0, 300) });
-         onSaved(value.trim());
-         setEditing(false);
-      } catch (err) {
-         Alert.alert("Error", err.message || "Failed to save bio");
-      } finally {
-         setSaving(false);
-      }
-   };
+  const handleSave = async () => {
+    if (value.trim() === (bio || "").trim()) {
+      setEditing(false);
+      return;
+    }
+    try {
+      setSaving(true);
+      await authAPI.updateMe({ bio: value.trim().slice(0, 300) });
+      onSaved(value.trim());
+      setEditing(false);
+    } catch (err) {
+      Alert.alert("Error", err.message || "Failed to save bio");
+    } finally {
+      setSaving(false);
+    }
+  };
 
-   if (editing) {
-      return (
-         <View style={bio_s.editWrap}>
-            <TextInput
-               style={bio_s.input}
-               value={value}
-               onChangeText={setValue}
-               multiline
-               maxLength={300}
-               autoFocus
-               textAlignVertical="top"
-               placeholderTextColor={COLORS.textDim}
-               placeholder="Tell potential matches about yourself..."
-               onBlur={handleSave}
-            />
-            <View style={bio_s.editRow}>
-               <Text style={bio_s.charCount}>{value.length}/300</Text>
-               <TouchableOpacity
-                  style={bio_s.saveBtn}
-                  onPress={handleSave}
-                  disabled={saving}
-               >
-                  {saving ? (
-                     <ActivityIndicator size="small" color={COLORS.bg} />
-                  ) : (
-                     <Text style={bio_s.saveBtnText}>Save</Text>
-                  )}
-               </TouchableOpacity>
-            </View>
-         </View>
-      );
-   }
-
-   return (
-      <TouchableOpacity
-         style={bio_s.displayWrap}
-         onPress={() => setEditing(true)}
-         activeOpacity={0.7}
+  if (editing) {
+    return (
+      <View
+        style={{
+          backgroundColor: COLORS.bgElevated,
+          borderRadius: RADIUS.md,
+          borderWidth: 1,
+          borderColor: COLORS.gold,
+          padding: SPACING.sm,
+        }}
       >
-         {bio ? (
-            <Text style={bio_s.bioText}>{bio}</Text>
-         ) : (
-            <Text style={bio_s.bioPlaceholder}>Tap to add a bio... ✏️</Text>
-         )}
-         <Text style={bio_s.editHint}>tap to edit</Text>
-      </TouchableOpacity>
-   );
+        <TextInput
+          style={{
+            fontFamily: FONTS.body,
+            fontSize: 14,
+            color: COLORS.textPrimary,
+            minHeight: 80,
+            padding: SPACING.sm,
+          }}
+          value={value}
+          onChangeText={setValue}
+          multiline
+          maxLength={300}
+          autoFocus
+          textAlignVertical="top"
+          placeholderTextColor={COLORS.textDim}
+          placeholder="Tell potential matches about yourself..."
+          onBlur={handleSave}
+        />
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginTop: 4,
+            paddingHorizontal: SPACING.sm,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: 11,
+              color: COLORS.textDim,
+            }}
+          >
+            {value.length}/300
+          </Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: COLORS.gold,
+              borderRadius: RADIUS.sm,
+              paddingHorizontal: SPACING.md,
+              paddingVertical: 5,
+            }}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color={COLORS.bg} />
+            ) : (
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyBold,
+                  fontSize: 13,
+                  color: COLORS.bg,
+                }}
+              >
+                Save
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity
+      style={{
+        backgroundColor: COLORS.bgElevated,
+        borderRadius: RADIUS.md,
+        padding: SPACING.md,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        minHeight: 56,
+      }}
+      onPress={() => setEditing(true)}
+      activeOpacity={0.7}
+    >
+      {bio ? (
+        <Text
+          style={{
+            fontFamily: FONTS.body,
+            fontSize: 14,
+            color: COLORS.textPrimary,
+            lineHeight: 20,
+          }}
+        >
+          {bio}
+        </Text>
+      ) : (
+        <Text
+          style={{
+            fontFamily: FONTS.body,
+            fontSize: 14,
+            color: COLORS.textDim,
+            fontStyle: "italic",
+          }}
+        >
+          Tap to add a bio... ✏️
+        </Text>
+      )}
+      <Text
+        style={{
+          fontFamily: FONTS.body,
+          fontSize: 10,
+          color: COLORS.textDim,
+          marginTop: 6,
+          letterSpacing: 1,
+        }}
+      >
+        tap to edit
+      </Text>
+    </TouchableOpacity>
+  );
 }
 
-// ── Edit basic profile info modal (name, age, gender) ─────────────────────────
 function EditProfileModal({ visible, user, onClose, onSaved }) {
-   const [name, setName] = useState(user?.name || "");
-   const [saving, setSaving] = useState(false);
+  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const [name, setName] = useState(user?.name || "");
+  const [saving, setSaving] = useState(false);
 
-   const GENDERS = [
-      { label: "Man", value: "male", emoji: "👨" },
-      { label: "Woman", value: "female", emoji: "👩" },
-   ];
+  const handleSave = async () => {
+    if (!name.trim()) {
+      Alert.alert("Required", "Please enter your name.");
+      return;
+    }
+    try {
+      setSaving(true);
+      await authAPI.updateMe({ name: name.trim() });
+      onSaved({ name: name.trim() });
+    } catch (err) {
+      Alert.alert("Error", err.response?.data?.message || err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
-   const handleSave = async () => {
-      if (!name.trim()) {
-         Alert.alert("Required", "Please enter your name.");
-         return;
-      }
-      try {
-         setSaving(true);
-         await authAPI.updateMe({ name: name.trim() });
-         onSaved({ name: name.trim() });
-      } catch (err) {
-         Alert.alert("Error", err.response?.data?.message || err.message);
-      } finally {
-         setSaving(false);
-      }
-   };
-
-   return (
-      <Modal
-         visible={visible}
-         animationType="slide"
-         presentationStyle="pageSheet"
-         onRequestClose={onClose}
-      >
-         <View style={ep.container}>
-            <View style={ep.header}>
-               <TouchableOpacity onPress={onClose}>
-                  <Text style={ep.cancel}>Cancel</Text>
-               </TouchableOpacity>
-               <Text style={ep.title}>EDIT PROFILE</Text>
-               <TouchableOpacity onPress={handleSave} disabled={saving}>
-                  <Text style={[ep.save, saving && { opacity: 0.5 }]}>
-                     {saving ? "Saving..." : "Save"}
-                  </Text>
-               </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={ep.scroll}>
-               {/* Name */}
-               <View style={ep.section}>
-                  <Text style={ep.sectionLabel}>DISPLAY NAME</Text>
-                  <TextInput
-                     style={ep.input}
-                     value={name}
-                     onChangeText={setName}
-                     placeholder="Your name"
-                     placeholderTextColor={COLORS.textDim}
-                     autoCapitalize="words"
-                     maxLength={50}
-                  />
-               </View>
-
-               {/* Age */}
-               {/* <View style={ep.section}>
-                  <Text style={ep.sectionLabel}>AGE</Text>
-                  <TextInput
-                     style={ep.input}
-                     value={age}
-                     onChangeText={setAge}
-                     keyboardType="number-pad"
-                     placeholder="Your age"
-                     placeholderTextColor={COLORS.textDim}
-                     maxLength={3}
-                  />
-               </View> */}
-
-               {/* Gender */}
-               {/* <View style={ep.section}>
-                  <Text style={ep.sectionLabel}>I AM A</Text>
-                  <View style={ep.chipRow}>
-                     {GENDERS.map((g) => (
-                        <TouchableOpacity
-                           key={g.value}
-                           style={[
-                              ep.chip,
-                              gender === g.value && ep.chipActive,
-                           ]}
-                           onPress={() => setGender(g.value)}
-                        >
-                           <Text style={ep.chipEmoji}>{g.emoji}</Text>
-                           <Text
-                              style={[
-                                 ep.chipText,
-                                 gender === g.value && ep.chipTextActive,
-                              ]}
-                           >
-                              {g.label}
-                           </Text>
-                        </TouchableOpacity>
-                     ))}
-                  </View>
-               </View> */}
-
-               <Text style={ep.hint}>
-                  Only your display name can be changed. Age, gender and birth
-                  details are permanent. Contact support if you need a
-                  correction.
-               </Text>
-
-               <View style={{ height: 40 }} />
-            </ScrollView>
-         </View>
-      </Modal>
-   );
-}
-
-// ── Edit preferences modal ────────────────────────────────────────────────────
-function EditPrefsModal({ visible, user, onClose, onSaved }) {
-   const [minAge, setMinAge] = useState(user?.preferences?.minAge ?? 18);
-   const [maxAge, setMaxAge] = useState(user?.preferences?.maxAge ?? 45);
-   const [minGuna, setMinGuna] = useState(
-      user?.preferences?.minGunaScore ?? 18,
-   );
-
-   const [genderPref, setGenderPref] = useState(
-      user?.preferences?.genderPref ?? "female",
-   );
-   const [lookingFor, setLookingFor] = useState(user?.lookingFor ?? "both");
-   const [saving, setSaving] = useState(false);
-
-   const GENDER_PREF_OPTIONS = [
-      { label: "Men", value: "male", emoji: "👨" },
-      { label: "Women", value: "female", emoji: "👩" },
-      { label: "Both", value: "both", emoji: "💫" },
-   ];
-   const LOOKING_OPTIONS = ["marriage", "dating", "both"];
-
-   const handleSave = async () => {
-      if (minAge > maxAge) {
-         Alert.alert("Invalid range", "Min age must be less than max age.");
-         return;
-      }
-      try {
-         setSaving(true);
-         const prefs = { minAge, maxAge, minGunaScore: minGuna, genderPref };
-         await onboardingAPI.saveProfile({
-            gender: user.gender,
-            preferences: prefs,
-            lookingFor,
-         });
-         onSaved({ preferences: prefs, lookingFor });
-      } catch (err) {
-         Alert.alert("Error", err.message || "Failed to save preferences");
-      } finally {
-         setSaving(false);
-      }
-   };
-
-   return (
-      <Modal
-         visible={visible}
-         animationType="slide"
-         presentationStyle="pageSheet"
-         onRequestClose={onClose}
-      >
-         <View style={modal.container}>
-            <View style={modal.header}>
-               <TouchableOpacity onPress={onClose}>
-                  <Text style={modal.cancel}>Cancel</Text>
-               </TouchableOpacity>
-               <Text style={modal.title}>PREFERENCES</Text>
-               <TouchableOpacity onPress={handleSave} disabled={saving}>
-                  <Text style={[modal.save, saving && { opacity: 0.5 }]}>
-                     {saving ? "Saving..." : "Save"}
-                  </Text>
-               </TouchableOpacity>
-            </View>
-
-            <ScrollView
-               style={{ flex: 1 }}
-               contentContainerStyle={modal.scroll}
-            >
-               {/* Age range */}
-               <View style={modal.section}>
-                  <Text style={modal.sectionLabel}>AGE RANGE</Text>
-                  <Text style={modal.sectionValue}>
-                     {minAge} – {maxAge} yrs
-                  </Text>
-                  <Text style={modal.sliderLabel}>Min: {minAge}</Text>
-                  <Slider
-                     minimumValue={18}
-                     maximumValue={maxAge - 1}
-                     step={1}
-                     value={minAge}
-                     onValueChange={(v) => setMinAge(Math.round(v))}
-                     minimumTrackTintColor={COLORS.gold}
-                     maximumTrackTintColor={COLORS.border}
-                     thumbTintColor={COLORS.gold}
-                  />
-                  <Text style={modal.sliderLabel}>Max: {maxAge}</Text>
-                  <Slider
-                     minimumValue={minAge + 1}
-                     maximumValue={70}
-                     step={1}
-                     value={maxAge}
-                     onValueChange={(v) => setMaxAge(Math.round(v))}
-                     minimumTrackTintColor={COLORS.gold}
-                     maximumTrackTintColor={COLORS.border}
-                     thumbTintColor={COLORS.gold}
-                  />
-               </View>
-
-               {/* Min Guna — min=1 so "Any" = 1, never 0 */}
-               <View style={modal.section}>
-                  <Text style={modal.sectionLabel}>MINIMUM GUNA SCORE</Text>
-                  <Text style={modal.sectionValue}>
-                     {minGuna === 1 ? "Any" : `${minGuna} / 36`}
-                  </Text>
-                  <Text style={modal.hint}>
-                     {minGuna <= 1
-                        ? "⚠️ Any score — all profiles appear"
-                        : minGuna < 18
-                          ? "⚠️ Low — many profiles may appear"
-                          : minGuna < 24
-                            ? "✅ Balanced baseline"
-                            : "🌟 Only strong matches"}
-                  </Text>
-                  <Slider
-                     minimumValue={1}
-                     maximumValue={36}
-                     step={1}
-                     value={minGuna}
-                     onValueChange={(v) => setMinGuna(Math.round(v))}
-                     minimumTrackTintColor={COLORS.gold}
-                     maximumTrackTintColor={COLORS.border}
-                     thumbTintColor={COLORS.gold}
-                  />
-               </View>
-
-               {/* <View style={modal.section}>
-                  <Text style={modal.sectionLabel}>SHOW ME</Text>
-                  <View style={modal.pills}>
-                     {GENDER_OPTIONS.map((opt) => (
-                        <TouchableOpacity
-                           key={opt}
-                           style={[
-                              modal.pill,
-                              genderPref === opt && modal.pillActive,
-                           ]}
-                           onPress={() => setGenderPref(opt)}
-                        >
-                           <Text
-                              style={[
-                                 modal.pillText,
-                                 genderPref === opt && modal.pillTextActive,
-                              ]}
-                           >
-                              {opt.charAt(0).toUpperCase() + opt.slice(1)}
-                           </Text>
-                        </TouchableOpacity>
-                     ))}
-                  </View>
-               </View> */}
-
-               <View style={modal.section}>
-                  <Text style={modal.sectionLabel}>SHOW ME</Text>
-                  <View style={modal.pills}>
-                     {GENDER_PREF_OPTIONS.map((opt) => (
-                        <TouchableOpacity
-                           key={opt.value}
-                           style={[
-                              modal.pill,
-                              genderPref === opt.value && modal.pillActive,
-                           ]}
-                           onPress={() => setGenderPref(opt.value)}
-                        >
-                           <Text style={{ fontSize: 18, marginBottom: 4 }}>
-                              {opt.emoji}
-                           </Text>
-                           <Text
-                              style={[
-                                 modal.pillText,
-                                 genderPref === opt.value &&
-                                    modal.pillTextActive,
-                              ]}
-                           >
-                              {opt.label}
-                           </Text>
-                        </TouchableOpacity>
-                     ))}
-                  </View>
-               </View>
-               {/* Looking for */}
-               <View style={modal.section}>
-                  <Text style={modal.sectionLabel}>LOOKING FOR</Text>
-                  <View style={modal.pills}>
-                     {LOOKING_OPTIONS.map((opt) => (
-                        <TouchableOpacity
-                           key={opt}
-                           style={[
-                              modal.pill,
-                              lookingFor === opt && modal.pillActive,
-                           ]}
-                           onPress={() => setLookingFor(opt)}
-                        >
-                           <Text
-                              style={[
-                                 modal.pillText,
-                                 lookingFor === opt && modal.pillTextActive,
-                              ]}
-                           >
-                              {opt.charAt(0).toUpperCase() + opt.slice(1)}
-                           </Text>
-                        </TouchableOpacity>
-                     ))}
-                  </View>
-               </View>
-
-               <View style={{ height: 40 }} />
-            </ScrollView>
-         </View>
-      </Modal>
-   );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Profile Screen
-// ─────────────────────────────────────────────────────────────────────────────
-export default function ProfileScreen() {
-   const dispatch = useDispatch();
-   const user = useSelector(selectUser);
-
-   const [loggingOut, setLoggingOut] = useState(false);
-   const [editProfile, setEditProfile] = useState(false);
-   const [editPrefs, setEditPrefs] = useState(false);
-   const [notifMatch, setNotifMatch] = useState(true);
-   const [notifMessage, setNotifMessage] = useState(true);
-   const [notifLiked, setNotifLiked] = useState(true);
-
-   const kundli = user?.kundli;
-   const gc = kundli ? GANA_CONFIG[kundli.gana] || GANA_CONFIG.Manushya : null;
-   const { isPremium, plan, expiresAt, refresh: refreshPremium } = usePremium();
-   const [showPaywall, setShowPaywall] = useState(false);
-
-   useFocusEffect(
-      useCallback(() => {
-         refreshPremium();
-      }, []),
-   );
-
-   const handleLogout = () => {
-      Alert.alert("Sign Out", "Are you sure?", [
-         { text: "Cancel", style: "cancel" },
-         {
-            text: "Sign Out",
-            style: "destructive",
-            onPress: async () => {
-               setLoggingOut(true);
-               disconnectSocket();
-               await dispatch(logout());
-            },
-         },
-      ]);
-   };
-
-   const handleProfileSaved = (updates) => {
-      dispatch(updateUser(updates));
-      setEditProfile(false);
-      Alert.alert("✅ Saved", "Your profile has been updated!");
-   };
-
-   const handlePrefsSaved = (updates) => {
-      dispatch(updateUser(updates));
-      setEditPrefs(false);
-      Alert.alert("✅ Saved", "Your preferences have been updated!");
-   };
-
-   const handleBioSaved = (newBio) => {
-      dispatch(updateUser({ bio: newBio }));
-   };
-
-   const handlePhotoUpload = async () => {
-      const { status } =
-         await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-         Alert.alert(
-            "Permission needed",
-            "Please allow photo access in settings.",
-         );
-         return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-         mediaTypes: ["images"],
-         allowsEditing: true,
-         aspect: [1, 1],
-         quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets?.[0]) {
-         const uri = result.assets[0].uri;
-         const filename = uri.split("/").pop();
-         const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
-         const mimeType =
-            ext === "png"
-               ? "image/png"
-               : ext === "webp"
-                 ? "image/webp"
-                 : "image/jpeg";
-
-         const formData = new FormData();
-         formData.append("photo", { uri, name: filename, type: mimeType });
-
-         try {
-            const res = await authAPI.uploadPhoto(formData);
-            if (res.data?.success) {
-               dispatch(updateUser({ photos: [res.data.photoUrl] }));
-               Alert.alert("✅ Photo updated!");
-            }
-         } catch (err) {
-            Alert.alert(
-               "Upload failed",
-               err?.response?.data?.message || err.message,
-            );
-         }
-      }
-   };
-
-   if (!user) return null;
-
-   return (
-      <>
-         <ScrollView
-            style={s.container}
-            contentContainerStyle={s.scroll}
-            showsVerticalScrollIndicator={false}
-         >
-            {/* ── Header ── */}
-            <View style={s.header}>
-               <Text style={s.headerTitle}>PROFILE</Text>
-            </View>
-
-            {/* Cosmic Hero Card */}
-            {kundli && gc && (
-               <View style={[s.heroCard, { borderColor: gc.color + "60" }]}>
-                  <View style={s.heroTop}>
-                     {/* Replace the existing avatar View with this */}
-                     <TouchableOpacity
-                        style={[
-                           s.avatar,
-                           { borderColor: gc.color, overflow: "hidden" },
-                        ]}
-                        onPress={handlePhotoUpload}
-                        activeOpacity={0.85}
-                     >
-                        {user.photos?.[0] ? (
-                           <Image
-                              source={{ uri: user.photos[0] }}
-                              style={{
-                                 width: "100%",
-                                 height: "100%",
-                                 borderRadius: 36,
-                              }}
-                              resizeMode="cover"
-                           />
-                        ) : (
-                           <>
-                              <Text
-                                 style={[s.avatarInitial, { color: gc.color }]}
-                              >
-                                 {user.name?.[0]?.toUpperCase() || "?"}
-                              </Text>
-                              <Text style={s.avatarEditHint}>tap to add</Text>
-                           </>
-                        )}
-                        {/* Camera overlay when photo exists */}
-                        {user.photos?.[0] && (
-                           <View style={s.avatarOverlay}>
-                              <Text style={{ fontSize: 16 }}>📷</Text>
-                           </View>
-                        )}
-                     </TouchableOpacity>
-                     <View style={s.heroNameBlock}>
-                        <Text style={s.heroName}>{user.name}</Text>
-                        <Text style={s.heroEmail}>{user.email}</Text>
-                        {user.age && (
-                           <Text style={s.heroAge}>
-                              {user.age} years old · {user.gender || "—"}
-                           </Text>
-                        )}
-                        <View
-                           style={[
-                              s.ganaBadge,
-                              {
-                                 backgroundColor: gc.bg,
-                                 borderColor: gc.color + "50",
-                              },
-                           ]}
-                        >
-                           <Text style={s.ganaEmoji}>{gc.emoji}</Text>
-                           <Text style={[s.ganaText, { color: gc.color }]}>
-                              {kundli.gana} · {gc.title}
-                           </Text>
-                        </View>
-                     </View>
-                  </View>
-
-                  {/* Edit profile button */}
-                  <TouchableOpacity
-                     style={s.editProfileBtn}
-                     onPress={() => setEditProfile(true)}
-                  >
-                     <Text style={s.editProfileBtnText}>
-                        ✏️ Edit Name / Age / Gender
-                     </Text>
-                  </TouchableOpacity>
-
-                  {/* Nakshatra row */}
-                  <View
-                     style={[
-                        s.nakshatraRow,
-                        {
-                           backgroundColor: gc.bg,
-                           borderColor: gc.color + "30",
-                        },
-                     ]}
-                  >
-                     <Text style={s.nakshatraSymbol}>
-                        {kundli.nakshatraSymbol}
-                     </Text>
-                     <View style={{ flex: 1 }}>
-                        <Text style={s.nakshatraName}>{kundli.nakshatra}</Text>
-                        <Text style={s.nakshatraRashi}>
-                           {kundli.rashi} Moon · Pada {kundli.pada}
-                        </Text>
-                     </View>
-                     <View style={s.lordBadge}>
-                        <Text style={s.lordLabel}>LORD</Text>
-                        <Text style={s.lordValue}>{kundli.lordPlanet}</Text>
-                     </View>
-                  </View>
-
-                  {/* Bio */}
-                  <View style={s.bioSection}>
-                     <Text style={s.bioLabel}>BIO</Text>
-                     <BioSection bio={user.bio} onSaved={handleBioSaved} />
-                  </View>
-               </View>
-            )}
-
-            {/* Subscription */}
-            <View style={s.card}>
-               <Text style={s.cardLabel}>SUBSCRIPTION</Text>
-               {isPremium ? (
-                  <View
-                     style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        paddingVertical: SPACING.sm,
-                     }}
-                  >
-                     <View
-                        style={{
-                           flexDirection: "row",
-                           alignItems: "center",
-                           gap: SPACING.sm,
-                        }}
-                     >
-                        <Text style={{ fontSize: 24 }}>👑</Text>
-                        <View>
-                           <Text
-                              style={{
-                                 fontFamily: FONTS.bodyBold,
-                                 fontSize: 15,
-                                 color: COLORS.gold,
-                              }}
-                           >
-                              VedicFind Premium
-                           </Text>
-                           <Text
-                              style={{
-                                 fontFamily: FONTS.body,
-                                 fontSize: 12,
-                                 color: COLORS.textSecondary,
-                              }}
-                           >
-                              {plan === "annual" ? "Annual" : "Monthly"} ·
-                              Expires{" "}
-                              {expiresAt
-                                 ? new Date(expiresAt).toLocaleDateString(
-                                      "en-IN",
-                                      {
-                                         day: "numeric",
-                                         month: "short",
-                                         year: "numeric",
-                                      },
-                                   )
-                                 : "—"}
-                           </Text>
-                        </View>
-                     </View>
-                     <View
-                        style={{
-                           backgroundColor: "rgba(240,192,96,0.15)",
-                           borderRadius: RADIUS.full,
-                           paddingHorizontal: 10,
-                           paddingVertical: 4,
-                           borderWidth: 1,
-                           borderColor: COLORS.gold + "40",
-                        }}
-                     >
-                        <Text
-                           style={{
-                              fontFamily: FONTS.bodyMedium,
-                              fontSize: 11,
-                              color: COLORS.gold,
-                           }}
-                        >
-                           ACTIVE
-                        </Text>
-                     </View>
-                  </View>
-               ) : (
-                  <TouchableOpacity
-                     style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        paddingVertical: SPACING.sm,
-                     }}
-                     onPress={() => setShowPaywall(true)}
-                     activeOpacity={0.8}
-                  >
-                     <View
-                        style={{
-                           flexDirection: "row",
-                           alignItems: "center",
-                           gap: SPACING.sm,
-                        }}
-                     >
-                        <Text style={{ fontSize: 24 }}>⭐</Text>
-                        <View>
-                           <Text
-                              style={{
-                                 fontFamily: FONTS.bodyMedium,
-                                 fontSize: 15,
-                                 color: COLORS.textPrimary,
-                              }}
-                           >
-                              Free Plan
-                           </Text>
-                           <Text
-                              style={{
-                                 fontFamily: FONTS.body,
-                                 fontSize: 12,
-                                 color: COLORS.textSecondary,
-                              }}
-                           >
-                              15 swipes/day · Upgrade for unlimited
-                           </Text>
-                        </View>
-                     </View>
-                     <View
-                        style={{
-                           backgroundColor: COLORS.gold,
-                           borderRadius: RADIUS.md,
-                           paddingHorizontal: 12,
-                           paddingVertical: 5,
-                        }}
-                     >
-                        <Text
-                           style={{
-                              fontFamily: FONTS.bodyBold,
-                              fontSize: 12,
-                              color: COLORS.bg,
-                           }}
-                        >
-                           Upgrade ✨
-                        </Text>
-                     </View>
-                  </TouchableOpacity>
-               )}
-            </View>
-
-            {/* Cosmic Attributes */}
-            {kundli && (
-               <View style={s.card}>
-                  <Text style={s.cardLabel}>COSMIC ATTRIBUTES</Text>
-                  <View style={s.statsGrid}>
-                     {[
-                        {
-                           emoji: "🐾",
-                           label: "Yoni Animal",
-                           value: kundli.animal,
-                        },
-                        { emoji: "🌊", label: "Nadi", value: kundli.nadi },
-                        { emoji: "📿", label: "Varna", value: kundli.varna },
-                        { emoji: "💫", label: "Vashya", value: kundli.vashya },
-                        {
-                           emoji: "🪐",
-                           label: "Lord Planet",
-                           value: kundli.lordPlanet,
-                        },
-                        {
-                           emoji: "🌙",
-                           label: "Moon °",
-                           value: `${kundli.moonLongitude?.toFixed(1)}°`,
-                        },
-                     ].map((item, i) => (
-                        <View key={i} style={s.statBox}>
-                           <Text style={s.statEmoji}>{item.emoji}</Text>
-                           <Text style={s.statValue}>{item.value}</Text>
-                           <Text style={s.statLabel}>{item.label}</Text>
-                        </View>
-                     ))}
-                  </View>
-               </View>
-            )}
-
-            {/* Koota Weights */}
-            <View style={s.card}>
-               <Text style={s.cardLabel}>ASHTA KOOTA WEIGHTS</Text>
-               <Text style={s.cardHint}>
-                  Maximum points each koota can contribute
-               </Text>
-               {KOOTA_INFO.map((k, idx) => (
-                  <View
-                     key={k.key}
-                     style={[
-                        s.kootaRow,
-                        idx < KOOTA_INFO.length - 1 && s.kootaRowBorder,
-                     ]}
-                  >
-                     <Text style={s.kootaEmoji}>{k.emoji}</Text>
-                     <View style={{ flex: 1 }}>
-                        <View style={s.kootaTopRow}>
-                           <Text style={s.kootaName}>{k.name}</Text>
-                           <Text style={s.kootaDesc}>{k.desc}</Text>
-                           <Text style={s.kootaMax}>{k.max} pts</Text>
-                        </View>
-                        <View style={s.kootaBarTrack}>
-                           <View
-                              style={[
-                                 s.kootaBarFill,
-                                 {
-                                    width: `${(k.max / 8) * 100}%`,
-                                    backgroundColor: COLORS.gold,
-                                    opacity: 0.25 + (k.max / 8) * 0.75,
-                                 },
-                              ]}
-                           />
-                        </View>
-                     </View>
-                  </View>
-               ))}
-            </View>
-
-            {/* Preferences */}
-            {user.preferences && (
-               <View style={s.card}>
-                  <View style={s.cardTitleRow}>
-                     <Text style={s.cardLabel}>PREFERENCES</Text>
-                     <TouchableOpacity
-                        onPress={() => setEditPrefs(true)}
-                        style={s.editBtn}
-                     >
-                        <Text style={s.editBtnText}>EDIT ✏️</Text>
-                     </TouchableOpacity>
-                  </View>
-                  {[
-                     {
-                        label: "Age range",
-                        value: `${user.preferences.minAge}–${user.preferences.maxAge} yrs`,
-                     },
-                     {
-                        label: "Min Guna score",
-                        value:
-                           user.preferences.minGunaScore <= 1
-                              ? "Any"
-                              : `${user.preferences.minGunaScore}+ / 36`,
-                     },
-                     { label: "Looking for", value: user.lookingFor || "both" },
-                  ].map((row) => (
-                     <View key={row.label} style={s.prefRow}>
-                        <Text style={s.prefLabel}>{row.label}</Text>
-                        <Text style={s.prefValue}>{row.value}</Text>
-                     </View>
-                  ))}
-               </View>
-            )}
-
-            {/* Notifications */}
-            <View style={s.card}>
-               <Text style={s.cardLabel}>NOTIFICATIONS</Text>
-               {[
-                  {
-                     label: "New matches",
-                     sub: "Alert on mutual match",
-                     val: notifMatch,
-                     set: setNotifMatch,
-                  },
-                  {
-                     label: "New messages",
-                     sub: "Alert when a match messages",
-                     val: notifMessage,
-                     set: setNotifMessage,
-                  },
-                  {
-                     label: "Likes",
-                     sub: "Alert when someone likes you",
-                     val: notifLiked,
-                     set: setNotifLiked,
-                  },
-               ].map((row) => (
-                  <View key={row.label} style={s.prefRow}>
-                     <View style={{ flex: 1 }}>
-                        <Text style={s.prefLabel}>{row.label}</Text>
-                        <Text
-                           style={[
-                              s.prefLabel,
-                              {
-                                 fontSize: 11,
-                                 color: COLORS.textDim,
-                                 marginTop: 1,
-                              },
-                           ]}
-                        >
-                           {row.sub}
-                        </Text>
-                     </View>
-                     <Switch
-                        value={row.val}
-                        onValueChange={row.set}
-                        trackColor={{ false: COLORS.border, true: COLORS.gold }}
-                        thumbColor="#fff"
-                     />
-                  </View>
-               ))}
-            </View>
-
-            {/* Account */}
-            <View style={s.card}>
-               <Text style={s.cardLabel}>ACCOUNT</Text>
-               <TouchableOpacity
-                  style={s.prefRow}
-                  onPress={handleLogout}
-                  disabled={loggingOut}
-               >
-                  <Text style={[s.prefLabel, { color: COLORS.rose }]}>
-                     {loggingOut ? "Signing out..." : "Sign Out"}
-                  </Text>
-                  <Text style={{ color: COLORS.rose, fontSize: 18 }}>›</Text>
-               </TouchableOpacity>
-               <TouchableOpacity
-                  style={s.prefRow}
-                  onPress={() =>
-                     Alert.alert(
-                        "Delete Account",
-                        "Not yet available. Contact support.",
-                     )
-                  }
-               >
-                  <View style={{ flex: 1 }}>
-                     <Text style={[s.prefLabel, { color: COLORS.rose }]}>
-                        Delete Account
-                     </Text>
-                     <Text
-                        style={[
-                           s.prefLabel,
-                           {
-                              fontSize: 11,
-                              color: COLORS.textDim,
-                              marginTop: 1,
-                           },
-                        ]}
-                     >
-                        This action is permanent
-                     </Text>
-                  </View>
-                  <Text style={{ color: COLORS.rose, fontSize: 18 }}>›</Text>
-               </TouchableOpacity>
-            </View>
-
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            paddingHorizontal: SPACING.xl,
+            paddingTop: 56,
+            paddingBottom: SPACING.lg,
+            borderBottomWidth: 1,
+            borderBottomColor: COLORS.border,
+          }}
+        >
+          <TouchableOpacity onPress={onClose}>
             <Text
-               style={{
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 16,
+                color: COLORS.textSecondary,
+              }}
+            >
+              Cancel
+            </Text>
+          </TouchableOpacity>
+          <Text
+            style={{
+              fontFamily: FONTS.headingBold,
+              fontSize: 14,
+              color: COLORS.gold,
+              letterSpacing: 3,
+            }}
+          >
+            EDIT PROFILE
+          </Text>
+          <TouchableOpacity onPress={handleSave} disabled={saving}>
+            <Text
+              style={{
+                fontFamily: FONTS.bodyBold,
+                fontSize: 16,
+                color: COLORS.gold,
+                opacity: saving ? 0.5 : 1,
+              }}
+            >
+              {saving ? "Saving..." : "Save"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: SPACING.xl }}>
+          <View
+            style={{
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              padding: SPACING.lg,
+              marginBottom: SPACING.lg,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 10,
+                color: COLORS.textDim,
+                letterSpacing: 3,
+                marginBottom: SPACING.sm,
+              }}
+            >
+              DISPLAY NAME
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: COLORS.bgElevated,
+                borderRadius: RADIUS.md,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                paddingHorizontal: SPACING.md,
+                paddingVertical: SPACING.md,
+                fontFamily: FONTS.bodyMedium,
+                fontSize: 16,
+                color: COLORS.textPrimary,
+              }}
+              value={name}
+              onChangeText={setName}
+              placeholder="Your name"
+              placeholderTextColor={COLORS.textDim}
+              autoCapitalize="words"
+              maxLength={50}
+            />
+          </View>
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: 12,
+              color: COLORS.textDim,
+              textAlign: "center",
+              lineHeight: 18,
+              paddingHorizontal: SPACING.xl,
+            }}
+          >
+            Only your display name can be changed. Age, gender and birth details
+            are permanent.
+          </Text>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+function EditPrefsModal({ visible, user, onClose, onSaved }) {
+  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const [minAge, setMinAge] = useState(user?.preferences?.minAge ?? 18);
+  const [maxAge, setMaxAge] = useState(user?.preferences?.maxAge ?? 45);
+  const [minGuna, setMinGuna] = useState(user?.preferences?.minGunaScore ?? 18);
+  const [genderPref, setGenderPref] = useState(
+    user?.preferences?.genderPref ?? "female"
+  );
+  const [lookingFor, setLookingFor] = useState(user?.lookingFor ?? "both");
+  const [saving, setSaving] = useState(false);
+
+  const GENDER_OPTIONS = [
+    { label: "Men", value: "male", emoji: "👨" },
+    { label: "Women", value: "female", emoji: "👩" },
+    { label: "Both", value: "both", emoji: "💫" },
+  ];
+  const LOOKING_OPTIONS = ["marriage", "dating", "both"];
+
+  const handleSave = async () => {
+    if (minAge > maxAge) {
+      Alert.alert("Invalid range", "Min age must be less than max age.");
+      return;
+    }
+    try {
+      setSaving(true);
+      const prefs = { minAge, maxAge, minGunaScore: minGuna, genderPref };
+      await onboardingAPI.saveProfile({
+        gender: user.gender,
+        preferences: prefs,
+        lookingFor,
+      });
+      onSaved({ preferences: prefs, lookingFor });
+    } catch (err) {
+      Alert.alert("Error", err.message || "Failed to save preferences");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            paddingHorizontal: SPACING.xl,
+            paddingTop: 56,
+            paddingBottom: SPACING.lg,
+            borderBottomWidth: 1,
+            borderBottomColor: COLORS.border,
+          }}
+        >
+          <TouchableOpacity onPress={onClose}>
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 16,
+                color: COLORS.textSecondary,
+              }}
+            >
+              Cancel
+            </Text>
+          </TouchableOpacity>
+          <Text
+            style={{
+              fontFamily: FONTS.headingBold,
+              fontSize: 14,
+              color: COLORS.gold,
+              letterSpacing: 3,
+            }}
+          >
+            PREFERENCES
+          </Text>
+          <TouchableOpacity onPress={handleSave} disabled={saving}>
+            <Text
+              style={{
+                fontFamily: FONTS.bodyBold,
+                fontSize: 16,
+                color: COLORS.gold,
+                opacity: saving ? 0.5 : 1,
+              }}
+            >
+              {saving ? "Saving..." : "Save"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: SPACING.xl }}>
+          {/* Age range */}
+          <View
+            style={{
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              padding: SPACING.lg,
+              marginBottom: SPACING.lg,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 10,
+                color: COLORS.textDim,
+                letterSpacing: 3,
+                marginBottom: 4,
+              }}
+            >
+              AGE RANGE
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.headingBold,
+                fontSize: 22,
+                color: COLORS.textPrimary,
+                marginBottom: SPACING.md,
+              }}
+            >
+              {minAge} – {maxAge} yrs
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 13,
+                color: COLORS.textSecondary,
+                marginBottom: 4,
+              }}
+            >
+              Min: {minAge}
+            </Text>
+            <Slider
+              minimumValue={18}
+              maximumValue={maxAge - 1}
+              step={1}
+              value={minAge}
+              onValueChange={(v) => setMinAge(Math.round(v))}
+              minimumTrackTintColor={COLORS.gold}
+              maximumTrackTintColor={COLORS.border}
+              thumbTintColor={COLORS.gold}
+            />
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 13,
+                color: COLORS.textSecondary,
+                marginBottom: 4,
+              }}
+            >
+              Max: {maxAge}
+            </Text>
+            <Slider
+              minimumValue={minAge + 1}
+              maximumValue={70}
+              step={1}
+              value={maxAge}
+              onValueChange={(v) => setMaxAge(Math.round(v))}
+              minimumTrackTintColor={COLORS.gold}
+              maximumTrackTintColor={COLORS.border}
+              thumbTintColor={COLORS.gold}
+            />
+          </View>
+          {/* Min Guna */}
+          <View
+            style={{
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              padding: SPACING.lg,
+              marginBottom: SPACING.lg,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 10,
+                color: COLORS.textDim,
+                letterSpacing: 3,
+                marginBottom: 4,
+              }}
+            >
+              MINIMUM GUNA SCORE
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.headingBold,
+                fontSize: 22,
+                color: COLORS.textPrimary,
+                marginBottom: SPACING.sm,
+              }}
+            >
+              {minGuna === 1 ? "Any" : `${minGuna} / 36`}
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 12,
+                color: COLORS.textSecondary,
+                marginBottom: SPACING.md,
+                fontStyle: "italic",
+              }}
+            >
+              {minGuna <= 1
+                ? "⚠️ Any score — all profiles appear"
+                : minGuna < 18
+                ? "⚠️ Low — many profiles may appear"
+                : minGuna < 24
+                ? "✅ Balanced baseline"
+                : "🌟 Only strong matches"}
+            </Text>
+            <Slider
+              minimumValue={1}
+              maximumValue={36}
+              step={1}
+              value={minGuna}
+              onValueChange={(v) => setMinGuna(Math.round(v))}
+              minimumTrackTintColor={COLORS.gold}
+              maximumTrackTintColor={COLORS.border}
+              thumbTintColor={COLORS.gold}
+            />
+          </View>
+          {/* Show me */}
+          <View
+            style={{
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              padding: SPACING.lg,
+              marginBottom: SPACING.lg,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 10,
+                color: COLORS.textDim,
+                letterSpacing: 3,
+                marginBottom: SPACING.sm,
+              }}
+            >
+              SHOW ME
+            </Text>
+            <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+              {GENDER_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={{
+                    flex: 1,
+                    alignItems: "center",
+                    paddingVertical: SPACING.sm,
+                    borderRadius: RADIUS.full,
+                    borderWidth: 1,
+                    borderColor:
+                      genderPref === opt.value ? COLORS.gold : COLORS.border,
+                    backgroundColor:
+                      genderPref === opt.value ? COLORS.gold : "transparent",
+                  }}
+                  onPress={() => setGenderPref(opt.value)}
+                >
+                  <Text style={{ fontSize: 18, marginBottom: 4 }}>
+                    {opt.emoji}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: 13,
+                      color:
+                        genderPref === opt.value
+                          ? COLORS.bg
+                          : COLORS.textSecondary,
+                    }}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          {/* Looking for */}
+          <View
+            style={{
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              padding: SPACING.lg,
+              marginBottom: SPACING.lg,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 10,
+                color: COLORS.textDim,
+                letterSpacing: 3,
+                marginBottom: SPACING.sm,
+              }}
+            >
+              LOOKING FOR
+            </Text>
+            <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+              {LOOKING_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt}
+                  style={{
+                    flex: 1,
+                    alignItems: "center",
+                    paddingHorizontal: SPACING.lg,
+                    paddingVertical: SPACING.sm,
+                    borderRadius: RADIUS.full,
+                    borderWidth: 1,
+                    borderColor:
+                      lookingFor === opt ? COLORS.gold : COLORS.border,
+                    backgroundColor:
+                      lookingFor === opt ? COLORS.gold : "transparent",
+                  }}
+                  onPress={() => setLookingFor(opt)}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: 14,
+                      color:
+                        lookingFor === opt ? COLORS.bg : COLORS.textSecondary,
+                    }}
+                  >
+                    {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+export default function ProfileScreen() {
+  const dispatch = useDispatch();
+  const user = useSelector(selectUser);
+  const { COLORS, FONTS, SPACING, RADIUS, GANA_CONFIG } = useTheme();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [editProfile, setEditProfile] = useState(false);
+  const [editPrefs, setEditPrefs] = useState(false);
+  const [notifMatch, setNotifMatch] = useState(true);
+  const [notifMessage, setNotifMessage] = useState(true);
+  const [notifLiked, setNotifLiked] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
+
+  const kundli = user?.kundli;
+  const gc = kundli ? GANA_CONFIG[kundli.gana] || GANA_CONFIG.Manushya : null;
+  const { isPremium, plan, expiresAt, refresh: refreshPremium } = usePremium();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshPremium();
+    }, [])
+  );
+
+  const handleLogout = () => {
+    Alert.alert("Sign Out", "Are you sure?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          setLoggingOut(true);
+          disconnectSocket();
+          await dispatch(logout());
+        },
+      },
+    ]);
+  };
+
+  const handleAddPhoto = async () => {
+    if ((user.photos?.length ?? 0) >= 3) {
+      Alert.alert("Limit reached", "Maximum 3 photos. Delete one first.");
+      return;
+    }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please allow photo access.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [4, 5],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      const uri = result.assets[0].uri;
+      const filename = uri.split("/").pop();
+      const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
+      const mimeType =
+        ext === "png"
+          ? "image/png"
+          : ext === "webp"
+          ? "image/webp"
+          : "image/jpeg";
+      const formData = new FormData();
+      formData.append("photo", { uri, name: filename, type: mimeType });
+      setUploadingPhoto(true);
+      try {
+        const res = await authAPI.uploadPhoto(formData);
+        if (res.data?.success) {
+          dispatch(updateUser({ photos: res.data.photos }));
+          const meRes = await authAPI.getMe();
+          if (meRes.data?.user) dispatch(updateUser(meRes.data.user));
+        }
+      } catch (err) {
+        Alert.alert(
+          "Upload failed",
+          err?.response?.data?.message || err.message
+        );
+      } finally {
+        setUploadingPhoto(false);
+      }
+    }
+  };
+
+  const handleDeletePhoto = (photoUrl) => {
+    Alert.alert("Delete Photo", "Remove this photo?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const res = await authAPI.deletePhoto(photoUrl);
+            if (res.data?.success)
+              dispatch(updateUser({ photos: res.data.photos }));
+          } catch (err) {
+            Alert.alert("Error", err?.response?.data?.message || err.message);
+          }
+        },
+      },
+    ]);
+  };
+
+  if (!user) return null;
+
+  return (
+    <>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: COLORS.bg }}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View
+          style={{
+            paddingHorizontal: SPACING.xl,
+            paddingTop: 56,
+            paddingBottom: SPACING.md,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: FONTS.headingBold,
+              fontSize: 16,
+              color: COLORS.gold,
+              letterSpacing: 4,
+            }}
+          >
+            PROFILE
+          </Text>
+        </View>
+
+        {/* Hero card */}
+        {kundli && gc && (
+          <View
+            style={{
+              marginHorizontal: SPACING.xl,
+              borderRadius: RADIUS.xl,
+              borderWidth: 1,
+              borderColor: gc.color + "60",
+              backgroundColor: COLORS.bgCard,
+              padding: SPACING.lg,
+              marginBottom: SPACING.lg,
+            }}
+          >
+            {/* Top row */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: SPACING.md,
+                marginBottom: SPACING.md,
+              }}
+            >
+              <TouchableOpacity
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 36,
+                  backgroundColor: COLORS.bgElevated,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 2,
+                  borderColor: gc.color,
+                  overflow: "hidden",
+                  flexShrink: 0,
+                }}
+                onPress={() =>
+                  user.photos?.[0]
+                    ? handleDeletePhoto(user.photos[0])
+                    : handleAddPhoto()
+                }
+                activeOpacity={0.85}
+              >
+                {user.photos?.[0] ? (
+                  <>
+                    <Image
+                      source={{ uri: user.photos[0] }}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        borderRadius: 36,
+                      }}
+                      resizeMode="cover"
+                    />
+                    <View
+                      style={{
+                        position: "absolute",
+                        bottom: 0,
+                        right: 0,
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: COLORS.gold,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text style={{ fontSize: 16 }}>📷</Text>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text
+                      style={{
+                        fontFamily: FONTS.headingBold,
+                        fontSize: 28,
+                        color: gc.color,
+                      }}
+                    >
+                      {user.name?.[0]?.toUpperCase() || "?"}
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: FONTS.body,
+                        fontSize: 9,
+                        color: COLORS.textDim,
+                        position: "absolute",
+                        bottom: 4,
+                      }}
+                    >
+                      tap to add
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text
+                  style={{
+                    fontFamily: FONTS.headingBold,
+                    fontSize: 22,
+                    color: COLORS.textPrimary,
+                  }}
+                >
+                  {user.name}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: 13,
+                    color: COLORS.textSecondary,
+                  }}
+                >
+                  {user.email}
+                </Text>
+                {user.age && (
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: 12,
+                      color: COLORS.textSecondary,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {user.age} years old · {user.gender || "—"}
+                  </Text>
+                )}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 5,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: RADIUS.full,
+                    borderWidth: 1,
+                    borderColor: gc.color + "50",
+                    backgroundColor: gc.bg,
+                    alignSelf: "flex-start",
+                  }}
+                >
+                  <Text style={{ fontSize: 13 }}>{gc.emoji}</Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: 12,
+                      color: gc.color,
+                    }}
+                  >
+                    {kundli.gana} · {gc.title}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Photo grid — 3 slots */}
+            <View
+              style={{
+                flexDirection: "row",
+                gap: SPACING.sm,
+                marginBottom: SPACING.md,
+              }}
+            >
+              {[0, 1, 2].map((index) => {
+                const photo = user.photos?.[index];
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={{
+                      flex: 1,
+                      height: 100,
+                      borderRadius: RADIUS.md,
+                      borderWidth: 1.5,
+                      overflow: "hidden",
+                      backgroundColor: COLORS.bgElevated,
+                      borderColor: photo ? gc.color + "60" : COLORS.border,
+                    }}
+                    onPress={() =>
+                      photo ? handleDeletePhoto(photo) : handleAddPhoto()
+                    }
+                    activeOpacity={0.8}
+                  >
+                    {photo ? (
+                      <>
+                        <Image
+                          source={{ uri: photo }}
+                          style={{ width: "100%", height: "100%" }}
+                          resizeMode="cover"
+                        />
+                        <View
+                          style={{
+                            position: "absolute",
+                            top: 6,
+                            right: 6,
+                            width: 22,
+                            height: 22,
+                            borderRadius: 11,
+                            backgroundColor: "rgba(0,0,0,0.6)",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: FONTS.bodyBold,
+                              fontSize: 11,
+                              color: "#fff",
+                            }}
+                          >
+                            ✕
+                          </Text>
+                        </View>
+                      </>
+                    ) : (
+                      <View
+                        style={{
+                          flex: 1,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 4,
+                        }}
+                      >
+                        {uploadingPhoto &&
+                        index === (user.photos?.length ?? 0) ? (
+                          <ActivityIndicator size="small" color={COLORS.gold} />
+                        ) : (
+                          <>
+                            <Text
+                              style={{
+                                fontFamily: FONTS.headingBold,
+                                fontSize: 24,
+                                color: COLORS.textDim,
+                              }}
+                            >
+                              +
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: FONTS.body,
+                                fontSize: 10,
+                                color: COLORS.textDim,
+                                letterSpacing: 1,
+                              }}
+                            >
+                              {index === 0 ? "Main" : `Photo ${index + 1}`}
+                            </Text>
+                          </>
+                        )}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Edit name button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: COLORS.bgElevated,
+                borderRadius: RADIUS.md,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                paddingVertical: SPACING.sm,
+                alignItems: "center",
+                marginBottom: SPACING.md,
+              }}
+              onPress={() => setEditProfile(true)}
+            >
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: 13,
+                  color: COLORS.textSecondary,
+                }}
+              >
+                ✏️ Edit Name
+              </Text>
+            </TouchableOpacity>
+
+            {/* Nakshatra row */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: SPACING.sm,
+                borderRadius: RADIUS.lg,
+                borderWidth: 1,
+                borderColor: gc.color + "30",
+                backgroundColor: gc.bg,
+                padding: SPACING.md,
+                marginBottom: SPACING.md,
+              }}
+            >
+              <Text style={{ fontSize: 36 }}>{kundli.nakshatraSymbol}</Text>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontFamily: FONTS.headingBold,
+                    fontSize: 18,
+                    color: COLORS.textPrimary,
+                  }}
+                >
+                  {kundli.nakshatra}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: 12,
+                    color: COLORS.textSecondary,
+                    marginTop: 2,
+                  }}
+                >
+                  {kundli.rashi} Moon · Pada {kundli.pada}
+                </Text>
+              </View>
+              <View style={{ alignItems: "center", paddingLeft: SPACING.sm }}>
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: 9,
+                    color: COLORS.textDim,
+                    letterSpacing: 2,
+                  }}
+                >
+                  LORD
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyBold,
+                    fontSize: 13,
+                    color: COLORS.gold,
+                  }}
+                >
+                  {kundli.lordPlanet}
+                </Text>
+              </View>
+            </View>
+
+            {/* Bio */}
+            <View style={{ gap: 6 }}>
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: 10,
+                  color: COLORS.textDim,
+                  letterSpacing: 3,
+                }}
+              >
+                BIO
+              </Text>
+              <BioSection
+                bio={user.bio}
+                onSaved={(b) => dispatch(updateUser({ bio: b }))}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Subscription */}
+        <View
+          style={{
+            marginHorizontal: SPACING.xl,
+            backgroundColor: COLORS.bgCard,
+            borderRadius: RADIUS.xl,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            padding: SPACING.lg,
+            marginBottom: SPACING.lg,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: 10,
+              color: COLORS.textDim,
+              letterSpacing: 3,
+              marginBottom: SPACING.md,
+            }}
+          >
+            SUBSCRIPTION
+          </Text>
+          {isPremium ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingVertical: SPACING.sm,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: SPACING.sm,
+                }}
+              >
+                <Text style={{ fontSize: 24 }}>👑</Text>
+                <View>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyBold,
+                      fontSize: 15,
+                      color: COLORS.gold,
+                    }}
+                  >
+                    VedicFind Premium
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: 12,
+                      color: COLORS.textSecondary,
+                    }}
+                  >
+                    {plan === "annual" ? "Annual" : "Monthly"} · Expires{" "}
+                    {expiresAt
+                      ? new Date(expiresAt).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "—"}
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  backgroundColor: COLORS.gold + "25",
+                  borderRadius: RADIUS.full,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderWidth: 1,
+                  borderColor: COLORS.gold + "40",
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyMedium,
+                    fontSize: 11,
+                    color: COLORS.gold,
+                  }}
+                >
+                  ACTIVE
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingVertical: SPACING.sm,
+              }}
+              onPress={() => setShowPaywall(true)}
+              activeOpacity={0.8}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: SPACING.sm,
+                }}
+              >
+                <Text style={{ fontSize: 24 }}>⭐</Text>
+                <View>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: 15,
+                      color: COLORS.textPrimary,
+                    }}
+                  >
+                    Free Plan
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: 12,
+                      color: COLORS.textSecondary,
+                    }}
+                  >
+                    15 swipes/day · Upgrade for unlimited
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  backgroundColor: COLORS.gold,
+                  borderRadius: RADIUS.md,
+                  paddingHorizontal: 12,
+                  paddingVertical: 5,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyBold,
+                    fontSize: 12,
+                    color: COLORS.bg,
+                  }}
+                >
+                  Upgrade ✨
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Cosmic attributes */}
+        {kundli && (
+          <View
+            style={{
+              marginHorizontal: SPACING.xl,
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+              padding: SPACING.lg,
+              marginBottom: SPACING.lg,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 10,
+                color: COLORS.textDim,
+                letterSpacing: 3,
+                marginBottom: SPACING.md,
+              }}
+            >
+              COSMIC ATTRIBUTES
+            </Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+              {[
+                { emoji: "🐾", label: "Yoni Animal", value: kundli.animal },
+                { emoji: "🌊", label: "Nadi", value: kundli.nadi },
+                { emoji: "📿", label: "Varna", value: kundli.varna },
+                { emoji: "💫", label: "Vashya", value: kundli.vashya },
+                { emoji: "🪐", label: "Lord Planet", value: kundli.lordPlanet },
+                {
+                  emoji: "🌙",
+                  label: "Moon °",
+                  value: `${kundli.moonLongitude?.toFixed(1)}°`,
+                },
+              ].map((item, i) => (
+                <View
+                  key={i}
+                  style={{
+                    width: "33.33%",
+                    alignItems: "center",
+                    paddingVertical: SPACING.sm,
+                  }}
+                >
+                  <Text style={{ fontSize: 18, marginBottom: 3 }}>
+                    {item.emoji}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyBold,
+                      fontSize: 13,
+                      color: COLORS.textPrimary,
+                      textAlign: "center",
+                    }}
+                  >
+                    {item.value}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: 10,
+                      color: COLORS.textDim,
+                      textAlign: "center",
+                      marginTop: 2,
+                    }}
+                  >
+                    {item.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Koota weights */}
+        <View
+          style={{
+            marginHorizontal: SPACING.xl,
+            backgroundColor: COLORS.bgCard,
+            borderRadius: RADIUS.xl,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            padding: SPACING.lg,
+            marginBottom: SPACING.lg,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: 10,
+              color: COLORS.textDim,
+              letterSpacing: 3,
+              marginBottom: 4,
+            }}
+          >
+            ASHTA KOOTA WEIGHTS
+          </Text>
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: 12,
+              color: COLORS.textSecondary,
+              marginBottom: SPACING.md,
+            }}
+          >
+            Maximum points each koota can contribute
+          </Text>
+          {KOOTA_INFO.map((k, idx) => (
+            <View
+              key={k.key}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: SPACING.sm,
+                paddingVertical: SPACING.sm,
+                borderBottomWidth: idx < KOOTA_INFO.length - 1 ? 1 : 0,
+                borderBottomColor: COLORS.border,
+              }}
+            >
+              <Text style={{ fontSize: 14, width: 20 }}>{k.emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginBottom: 4,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: 12,
+                      color: COLORS.textPrimary,
+                      width: 88,
+                    }}
+                  >
+                    {k.name}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: 11,
+                      color: COLORS.textSecondary,
+                      flex: 1,
+                    }}
+                  >
+                    {k.desc}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyBold,
+                      fontSize: 11,
+                      color: COLORS.gold,
+                    }}
+                  >
+                    {k.max} pts
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    height: 3,
+                    backgroundColor: COLORS.border,
+                    borderRadius: 2,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View
+                    style={{
+                      height: 3,
+                      width: `${(k.max / 8) * 100}%`,
+                      backgroundColor: COLORS.gold,
+                      opacity: 0.25 + (k.max / 8) * 0.75,
+                      borderRadius: 2,
+                    }}
+                  />
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Preferences */}
+        {user.preferences && (
+          <View
+            style={{
+              marginHorizontal: SPACING.xl,
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+              padding: SPACING.lg,
+              marginBottom: SPACING.lg,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: SPACING.md,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: 10,
+                  color: COLORS.textDim,
+                  letterSpacing: 3,
+                }}
+              >
+                PREFERENCES
+              </Text>
+              <TouchableOpacity
+                onPress={() => setEditPrefs(true)}
+                style={{
+                  paddingHorizontal: SPACING.sm,
+                  paddingVertical: 4,
+                  borderRadius: RADIUS.sm,
+                  borderWidth: 1,
+                  borderColor: COLORS.gold,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyMedium,
+                    fontSize: 11,
+                    color: COLORS.gold,
+                  }}
+                >
+                  EDIT ✏️
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {[
+              {
+                label: "Age range",
+                value: `${user.preferences.minAge}–${user.preferences.maxAge} yrs`,
+              },
+              {
+                label: "Min Guna score",
+                value:
+                  user.preferences.minGunaScore <= 1
+                    ? "Any"
+                    : `${user.preferences.minGunaScore}+ / 36`,
+              },
+              { label: "Looking for", value: user.lookingFor || "both" },
+            ].map((row) => (
+              <View
+                key={row.label}
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  paddingVertical: SPACING.sm,
+                  borderBottomWidth: 1,
+                  borderBottomColor: COLORS.border,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: 14,
+                    color: COLORS.textSecondary,
+                  }}
+                >
+                  {row.label}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyMedium,
+                    fontSize: 14,
+                    color: COLORS.textPrimary,
+                  }}
+                >
+                  {row.value}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Settings — Notifications + Theme toggle */}
+        <View
+          style={{
+            marginHorizontal: SPACING.xl,
+            backgroundColor: COLORS.bgCard,
+            borderRadius: RADIUS.xl,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            padding: SPACING.lg,
+            marginBottom: SPACING.lg,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: 10,
+              color: COLORS.textDim,
+              letterSpacing: 3,
+              marginBottom: SPACING.md,
+            }}
+          >
+            SETTINGS
+          </Text>
+
+          {/* Theme toggle */}
+          <ThemeToggle
+            style={{
+              borderBottomWidth: 1,
+              borderBottomColor: COLORS.border,
+              paddingBottom: SPACING.md,
+              marginBottom: 4,
+            }}
+          />
+
+          {/* Notifications */}
+          {[
+            {
+              label: "New matches",
+              sub: "Alert on mutual match",
+              val: notifMatch,
+              set: setNotifMatch,
+            },
+            {
+              label: "New messages",
+              sub: "Alert when a match messages",
+              val: notifMessage,
+              set: setNotifMessage,
+            },
+            {
+              label: "Likes",
+              sub: "Alert when someone likes you",
+              val: notifLiked,
+              set: setNotifLiked,
+            },
+          ].map((row) => (
+            <View
+              key={row.label}
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                paddingVertical: SPACING.sm,
+                borderBottomWidth: 1,
+                borderBottomColor: COLORS.border,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: 14,
+                    color: COLORS.textSecondary,
+                  }}
+                >
+                  {row.label}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: 11,
+                    color: COLORS.textDim,
+                    marginTop: 1,
+                  }}
+                >
+                  {row.sub}
+                </Text>
+              </View>
+              <Switch
+                value={row.val}
+                onValueChange={row.set}
+                trackColor={{ false: COLORS.border, true: COLORS.gold }}
+                thumbColor="#fff"
+              />
+            </View>
+          ))}
+        </View>
+
+        {/* Account */}
+        <View
+          style={{
+            marginHorizontal: SPACING.xl,
+            backgroundColor: COLORS.bgCard,
+            borderRadius: RADIUS.xl,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            padding: SPACING.lg,
+            marginBottom: SPACING.lg,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: 10,
+              color: COLORS.textDim,
+              letterSpacing: 3,
+              marginBottom: SPACING.sm,
+            }}
+          >
+            ACCOUNT
+          </Text>
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingVertical: SPACING.sm,
+              borderBottomWidth: 1,
+              borderBottomColor: COLORS.border,
+            }}
+            onPress={handleLogout}
+            disabled={loggingOut}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: 14,
+                color: COLORS.rose,
+              }}
+            >
+              {loggingOut ? "Signing out..." : "Sign Out"}
+            </Text>
+            <Text style={{ color: COLORS.rose, fontSize: 18 }}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingVertical: SPACING.sm,
+            }}
+            onPress={() =>
+              Alert.alert(
+                "Delete Account",
+                "Not yet available. Contact support."
+              )
+            }
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: 14,
+                  color: COLORS.rose,
+                }}
+              >
+                Delete Account
+              </Text>
+              <Text
+                style={{
                   fontFamily: FONTS.body,
                   fontSize: 11,
                   color: COLORS.textDim,
-                  textAlign: "center",
-                  marginTop: 8,
-               }}
-            >
-               VedicFind · v1.0
-            </Text>
-            <View style={{ height: 48 }} />
-         </ScrollView>
-         <PaywallModal
-            visible={showPaywall}
-            onClose={() => {
-               setShowPaywall(false);
-               refreshPremium();
-            }}
-            triggerReason="default"
-         />
-         {user && (
-            <EditProfileModal
-               visible={editProfile}
-               user={user}
-               onClose={() => setEditProfile(false)}
-               onSaved={handleProfileSaved}
-            />
-         )}
-         {user && (
-            <EditPrefsModal
-               visible={editPrefs}
-               user={user}
-               onClose={() => setEditPrefs(false)}
-               onSaved={handlePrefsSaved}
-            />
-         )}
-      </>
-   );
+                  marginTop: 1,
+                }}
+              >
+                This action is permanent
+              </Text>
+            </View>
+            <Text style={{ color: COLORS.rose, fontSize: 18 }}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text
+          style={{
+            fontFamily: FONTS.body,
+            fontSize: 11,
+            color: COLORS.textDim,
+            textAlign: "center",
+            marginTop: 8,
+          }}
+        >
+          VedicFind · v1.3
+        </Text>
+        <View style={{ height: 48 }} />
+      </ScrollView>
+
+      <PaywallModal
+        visible={showPaywall}
+        onClose={() => {
+          setShowPaywall(false);
+          refreshPremium();
+        }}
+        triggerReason="default"
+      />
+      {user && (
+        <EditProfileModal
+          visible={editProfile}
+          user={user}
+          onClose={() => setEditProfile(false)}
+          onSaved={(u) => {
+            dispatch(updateUser(u));
+            setEditProfile(false);
+            Alert.alert("✅ Saved", "Profile updated!");
+          }}
+        />
+      )}
+      {user && (
+        <EditPrefsModal
+          visible={editPrefs}
+          user={user}
+          onClose={() => setEditPrefs(false)}
+          onSaved={(u) => {
+            dispatch(updateUser(u));
+            setEditPrefs(false);
+            Alert.alert("✅ Saved", "Preferences updated!");
+          }}
+        />
+      )}
+    </>
+  );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-   container: { flex: 1, backgroundColor: COLORS.bg },
-   scroll: { paddingBottom: 40 },
-   header: {
-      paddingHorizontal: SPACING.xl,
-      paddingTop: 56,
-      paddingBottom: SPACING.md,
-   },
-   headerTitle: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 16,
-      color: COLORS.gold,
-      letterSpacing: 4,
-   },
-   heroCard: {
-      marginHorizontal: SPACING.xl,
-      borderRadius: RADIUS.xl,
-      borderWidth: 1,
-      backgroundColor: COLORS.bgCard,
-      padding: SPACING.lg,
-      marginBottom: SPACING.lg,
-   },
-   heroTop: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.md,
-      marginBottom: SPACING.md,
-   },
-   avatar: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      backgroundColor: COLORS.bgElevated,
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 2,
-      flexShrink: 0,
-   },
-   avatarInitial: { fontFamily: FONTS.headingBold, fontSize: 28 },
-   avatarEditHint: {
-      fontFamily: FONTS.body,
-      fontSize: 9,
-      color: COLORS.textDim,
-      position: "absolute",
-      bottom: 4,
-   },
-   avatarOverlay: {
-      position: "absolute",
-      bottom: 0,
-      right: 0,
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: COLORS.gold,
-      alignItems: "center",
-      justifyContent: "center",
-   },
-   heroNameBlock: { flex: 1, gap: 2 },
-   heroName: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 22,
-      color: COLORS.textPrimary,
-   },
-   heroEmail: {
-      fontFamily: FONTS.body,
-      fontSize: 13,
-      color: COLORS.textSecondary,
-   },
-   heroAge: {
-      fontFamily: FONTS.body,
-      fontSize: 12,
-      color: COLORS.textSecondary,
-      marginBottom: 4,
-   },
-   ganaBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: RADIUS.full,
-      borderWidth: 1,
-      alignSelf: "flex-start",
-   },
-   ganaEmoji: { fontSize: 13 },
-   ganaText: { fontFamily: FONTS.bodyMedium, fontSize: 12 },
-   editProfileBtn: {
-      backgroundColor: COLORS.bgElevated,
-      borderRadius: RADIUS.md,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-      paddingVertical: SPACING.sm,
-      alignItems: "center",
-      marginBottom: SPACING.md,
-   },
-   editProfileBtnText: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 13,
-      color: COLORS.textSecondary,
-   },
-   nakshatraRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.sm,
-      borderRadius: RADIUS.lg,
-      borderWidth: 1,
-      padding: SPACING.md,
-      marginBottom: SPACING.md,
-   },
-   nakshatraSymbol: { fontSize: 36 },
-   nakshatraName: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 18,
-      color: COLORS.textPrimary,
-   },
-   nakshatraRashi: {
-      fontFamily: FONTS.body,
-      fontSize: 12,
-      color: COLORS.textSecondary,
-      marginTop: 2,
-   },
-   lordBadge: { alignItems: "center", paddingLeft: SPACING.sm },
-   lordLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 9,
-      color: COLORS.textDim,
-      letterSpacing: 2,
-   },
-   lordValue: { fontFamily: FONTS.bodyBold, fontSize: 13, color: COLORS.gold },
-   bioSection: { gap: 6 },
-   bioLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 10,
-      color: COLORS.textDim,
-      letterSpacing: 3,
-   },
-   card: {
-      marginHorizontal: SPACING.xl,
-      backgroundColor: COLORS.bgCard,
-      borderRadius: RADIUS.xl,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-      padding: SPACING.lg,
-      marginBottom: SPACING.lg,
-   },
-   cardLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 10,
-      color: COLORS.textDim,
-      letterSpacing: 3,
-      marginBottom: SPACING.md,
-   },
-   cardHint: {
-      fontFamily: FONTS.body,
-      fontSize: 12,
-      color: COLORS.textSecondary,
-      marginTop: -SPACING.sm,
-      marginBottom: SPACING.md,
-   },
-   cardTitleRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: SPACING.md,
-   },
-   editBtn: {
-      paddingHorizontal: SPACING.sm,
-      paddingVertical: 4,
-      borderRadius: RADIUS.sm,
-      borderWidth: 1,
-      borderColor: COLORS.gold,
-   },
-   editBtnText: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 11,
-      color: COLORS.gold,
-   },
-   statsGrid: { flexDirection: "row", flexWrap: "wrap" },
-   statBox: {
-      width: "33.33%",
-      alignItems: "center",
-      paddingVertical: SPACING.sm,
-   },
-   statEmoji: { fontSize: 18, marginBottom: 3 },
-   statValue: {
-      fontFamily: FONTS.bodyBold,
-      fontSize: 13,
-      color: COLORS.textPrimary,
-      textAlign: "center",
-   },
-   statLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 10,
-      color: COLORS.textDim,
-      textAlign: "center",
-      marginTop: 2,
-   },
-   kootaRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACING.sm,
-      paddingVertical: SPACING.sm,
-   },
-   kootaRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
-   kootaEmoji: { fontSize: 14, width: 20 },
-   kootaTopRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-   kootaName: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 12,
-      color: COLORS.textPrimary,
-      width: 88,
-   },
-   kootaDesc: {
-      fontFamily: FONTS.body,
-      fontSize: 11,
-      color: COLORS.textSecondary,
-      flex: 1,
-   },
-   kootaMax: { fontFamily: FONTS.bodyBold, fontSize: 11, color: COLORS.gold },
-   kootaBarTrack: {
-      height: 3,
-      backgroundColor: COLORS.border,
-      borderRadius: 2,
-      overflow: "hidden",
-   },
-   kootaBarFill: { height: 3, borderRadius: 2 },
-   prefRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      paddingVertical: SPACING.sm,
-      borderBottomWidth: 1,
-      borderBottomColor: COLORS.border,
-   },
-   prefLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 14,
-      color: COLORS.textSecondary,
-   },
-   prefValue: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 14,
-      color: COLORS.textPrimary,
-   },
-});
-
-// Bio inline editor styles
-const bio_s = StyleSheet.create({
-   displayWrap: {
-      backgroundColor: COLORS.bgElevated,
-      borderRadius: RADIUS.md,
-      padding: SPACING.md,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-      minHeight: 56,
-   },
-   bioText: {
-      fontFamily: FONTS.body,
-      fontSize: 14,
-      color: COLORS.textPrimary,
-      lineHeight: 20,
-   },
-   bioPlaceholder: {
-      fontFamily: FONTS.body,
-      fontSize: 14,
-      color: COLORS.textDim,
-      fontStyle: "italic",
-   },
-   editHint: {
-      fontFamily: FONTS.body,
-      fontSize: 10,
-      color: COLORS.textDim,
-      marginTop: 6,
-      letterSpacing: 1,
-   },
-   editWrap: {
-      backgroundColor: COLORS.bgElevated,
-      borderRadius: RADIUS.md,
-      borderWidth: 1,
-      borderColor: COLORS.gold,
-      padding: SPACING.sm,
-   },
-   input: {
-      fontFamily: FONTS.body,
-      fontSize: 14,
-      color: COLORS.textPrimary,
-      minHeight: 80,
-      padding: SPACING.sm,
-   },
-   editRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginTop: 4,
-      paddingHorizontal: SPACING.sm,
-   },
-   charCount: { fontFamily: FONTS.body, fontSize: 11, color: COLORS.textDim },
-   saveBtn: {
-      backgroundColor: COLORS.gold,
-      borderRadius: RADIUS.sm,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: 5,
-   },
-   saveBtnText: { fontFamily: FONTS.bodyBold, fontSize: 13, color: COLORS.bg },
-});
-
-// Edit Profile modal styles
-const ep = StyleSheet.create({
-   container: { flex: 1, backgroundColor: COLORS.bg },
-   header: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      paddingHorizontal: SPACING.xl,
-      paddingTop: 56,
-      paddingBottom: SPACING.lg,
-      borderBottomWidth: 1,
-      borderBottomColor: COLORS.border,
-   },
-   title: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 14,
-      color: COLORS.gold,
-      letterSpacing: 3,
-   },
-   cancel: {
-      fontFamily: FONTS.body,
-      fontSize: 16,
-      color: COLORS.textSecondary,
-   },
-   save: { fontFamily: FONTS.bodyBold, fontSize: 16, color: COLORS.gold },
-   scroll: { padding: SPACING.xl },
-   section: {
-      backgroundColor: COLORS.bgCard,
-      borderRadius: RADIUS.xl,
-      padding: SPACING.lg,
-      marginBottom: SPACING.lg,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-   },
-   sectionLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 10,
-      color: COLORS.textDim,
-      letterSpacing: 3,
-      marginBottom: SPACING.sm,
-   },
-   input: {
-      backgroundColor: COLORS.bgElevated,
-      borderRadius: RADIUS.md,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: SPACING.md,
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 16,
-      color: COLORS.textPrimary,
-   },
-   chipRow: { flexDirection: "row", gap: SPACING.sm },
-   chip: {
-      flex: 1,
-      alignItems: "center",
-      paddingVertical: SPACING.md,
-      borderRadius: RADIUS.md,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-      backgroundColor: COLORS.bgElevated,
-   },
-   chipActive: { borderColor: COLORS.gold, backgroundColor: COLORS.bgCard },
-   chipEmoji: { fontSize: 22, marginBottom: 4 },
-   chipText: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 13,
-      color: COLORS.textSecondary,
-   },
-   chipTextActive: { color: COLORS.gold },
-   hint: {
-      fontFamily: FONTS.body,
-      fontSize: 12,
-      color: COLORS.textDim,
-      textAlign: "center",
-      lineHeight: 18,
-      paddingHorizontal: SPACING.xl,
-   },
-});
-
-const modal = StyleSheet.create({
-   container: { flex: 1, backgroundColor: COLORS.bg },
-   header: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      paddingHorizontal: SPACING.xl,
-      paddingTop: 56,
-      paddingBottom: SPACING.lg,
-      borderBottomWidth: 1,
-      borderBottomColor: COLORS.border,
-   },
-   title: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 14,
-      color: COLORS.gold,
-      letterSpacing: 3,
-   },
-   cancel: {
-      fontFamily: FONTS.body,
-      fontSize: 16,
-      color: COLORS.textSecondary,
-   },
-   save: { fontFamily: FONTS.bodyBold, fontSize: 16, color: COLORS.gold },
-   scroll: { padding: SPACING.xl },
-   section: {
-      backgroundColor: COLORS.bgCard,
-      borderRadius: RADIUS.xl,
-      padding: SPACING.lg,
-      marginBottom: SPACING.lg,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-   },
-   sectionLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 10,
-      color: COLORS.textDim,
-      letterSpacing: 3,
-      marginBottom: 4,
-   },
-   sectionValue: {
-      fontFamily: FONTS.headingBold,
-      fontSize: 22,
-      color: COLORS.textPrimary,
-      marginBottom: SPACING.md,
-   },
-   sliderLabel: {
-      fontFamily: FONTS.body,
-      fontSize: 13,
-      color: COLORS.textSecondary,
-      marginBottom: 4,
-   },
-   hint: {
-      fontFamily: FONTS.body,
-      fontSize: 12,
-      color: COLORS.textSecondary,
-      marginBottom: SPACING.md,
-      fontStyle: "italic",
-   },
-   pills: {
-      flexDirection: "row",
-      gap: SPACING.sm,
-      flexWrap: "wrap",
-      marginTop: SPACING.sm,
-   },
-   pill: {
-      flex: 1,
-      alignItems: "center",
-      paddingHorizontal: SPACING.lg,
-      paddingVertical: SPACING.sm,
-      borderRadius: RADIUS.full,
-      borderWidth: 1,
-      borderColor: COLORS.border,
-   },
-   pillActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
-   pillText: {
-      fontFamily: FONTS.bodyMedium,
-      fontSize: 14,
-      color: COLORS.textSecondary,
-   },
-   pillTextActive: { color: COLORS.bg },
-});

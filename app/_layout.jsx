@@ -3,6 +3,9 @@
 // Root layout. Handles fonts, auth session restore, push notifications,
 // and RevenueCat initialization — but only after login is confirmed.
 
+// Root layout — wraps everything in ThemeProvider.
+// StatusBar now adapts to current theme.
+
 import { useEffect, useRef } from "react";
 import { Alert, AppState } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
@@ -11,246 +14,240 @@ import * as SplashScreen from "expo-splash-screen";
 import { Provider, useSelector, useDispatch } from "react-redux";
 import { store } from "../store";
 import {
-   initAuth,
-   selectToken,
-   selectIsLoading,
-   selectOnboardingComplete,
-   selectUser,
+  initAuth,
+  selectToken,
+  selectIsLoading,
+  selectOnboardingComplete,
+  selectUser,
 } from "../store/slices/authSlice";
 import {
-   useFonts,
-   Cinzel_600SemiBold,
-   Cinzel_700Bold,
+  useFonts,
+  Cinzel_600SemiBold,
+  Cinzel_700Bold,
 } from "@expo-google-fonts/cinzel";
 import {
-   Nunito_400Regular,
-   Nunito_600SemiBold,
-   Nunito_700Bold,
+  Nunito_400Regular,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
 } from "@expo-google-fonts/nunito";
 import {
-   registerForPushNotifications,
-   subscribeToForegroundNotifications,
-   subscribeToNotificationResponse,
-   getInitialNotification,
-   clearBadgeCount,
+  registerForPushNotifications,
+  subscribeToForegroundNotifications,
+  subscribeToNotificationResponse,
+  getInitialNotification,
+  clearBadgeCount,
 } from "../services/notifications";
 import { fetchPremiumStatus, resetPremium } from "../store/slices/premiumSlice";
-import Purchases from "react-native-purchases";
+// import Purchases from "react-native-purchases";
+
+let Purchases = null;
+try {
+  Purchases = require("react-native-purchases").default;
+} catch (e) {
+  console.log("[RC] react-native-purchases not available in Expo Go");
+}
 import NetworkBanner from "../components/NetworkBanner";
+import { ThemeProvider, useTheme } from "../context/ThemeContext";
 
 SplashScreen.preventAutoHideAsync();
 
 // Redirects the user to the correct screen based on auth + onboarding state
 function NavigationGuard() {
-   const router = useRouter();
-   const segments = useSegments();
-   const token = useSelector(selectToken);
-   const loading = useSelector(selectIsLoading);
-   const onboardingComplete = useSelector(selectOnboardingComplete);
+  const router = useRouter();
+  const segments = useSegments();
+  const token = useSelector(selectToken);
+  const loading = useSelector(selectIsLoading);
+  const onboardingComplete = useSelector(selectOnboardingComplete);
 
-   useEffect(() => {
-      if (loading) return;
+  useEffect(() => {
+    if (loading) return;
+    const inAuth = segments[0] === "(auth)";
+    const inOnboarding = segments[0] === "(onboarding)";
+    const inTabs = segments[0] === "(tabs)";
+    const isPhotoUpload = segments[1] === "photo-upload";
+    if (isPhotoUpload) return;
 
-      const inAuth = segments[0] === "(auth)";
-      const inOnboarding = segments[0] === "(onboarding)";
-      const inTabs = segments[0] === "(tabs)";
-      // photo-upload is a post-onboarding step, allowed even when
-      // onboardingComplete is true
-      const isPhotoUpload = segments[1] === "photo-upload";
-      if (isPhotoUpload) return;
+    if (!token) {
+      if (!inAuth) router.replace("/(auth)");
+    } else if (!onboardingComplete) {
+      if (!inOnboarding) router.replace("/(onboarding)/birth-details");
+    } else {
+      if (!inTabs) router.replace("/(tabs)/discover");
+    }
+  }, [token, loading, onboardingComplete, segments]);
 
-      if (!token) {
-         if (!inAuth) router.replace("/(auth)");
-      } else if (!onboardingComplete) {
-         if (!inOnboarding) router.replace("/(onboarding)/birth-details");
-      } else {
-         if (!inTabs) router.replace("/(tabs)/discover");
-      }
-   }, [token, loading, onboardingComplete, segments]);
-
-   return null;
+  return null;
 }
 
 // Handles notification taps and routes to the correct screen
 function PushNotificationHandler() {
-   const router = useRouter();
-   const token = useSelector(selectToken);
+  const router = useRouter();
+  const token = useSelector(selectToken);
 
-   // Handle notification tap → navigate
-   const handleNotificationData = (data) => {
-      if (!data || !token) return;
+  const handleNotificationData = (data) => {
+    if (!data || !token) return;
+    if (data.type === "match" && data.matchId) {
+      router.push("/(tabs)/matches");
+    } else if (data.type === "message" && data.matchId) {
+      router.push(`/(tabs)/chat/${data.matchId}`);
+    } else if (data.type === "liked") {
+      router.push("/(tabs)/matches");
+    }
+  };
 
-      console.log("[PUSH HANDLER] Handling notification tap:", data);
-
-      // data.type set by backend when sending push
-      if (data.type === "match" && data.matchId) {
-         // New match → go to matches tab
-         router.push("/(tabs)/matches");
-      } else if (data.type === "message" && data.matchId) {
-         // New message → go directly to chat
-         router.push(`/(tabs)/chat/${data.matchId}`);
-      } else if (data.type === "liked") {
-         // Someone liked you → go to swipe history
-         router.push("/(tabs)/matches");
+  useEffect(() => {
+    if (!token) return;
+    getInitialNotification().then((data) => {
+      if (data && Object.keys(data).length > 0) {
+        setTimeout(() => handleNotificationData(data), 1000);
       }
-   };
+    });
+    const unsubForeground = subscribeToForegroundNotifications(
+      ({ title, body, data }) => {
+        Alert.alert(title || "VedicFind", body || "", [
+          { text: "Dismiss", style: "cancel" },
+          { text: "View", onPress: () => handleNotificationData(data) },
+        ]);
+      }
+    );
+    const unsubResponse = subscribeToNotificationResponse(
+      handleNotificationData
+    );
+    return () => {
+      unsubForeground();
+      unsubResponse();
+    };
+  }, [token]);
 
-   useEffect(() => {
-      if (!token) return;
-
-      // Check if app was opened by tapping a notification (cold start)
-      getInitialNotification().then((data) => {
-         if (data && Object.keys(data).length > 0) {
-            console.log("[PUSH HANDLER] Cold start notification:", data);
-            // Small delay to let navigation settle after auth
-            setTimeout(() => handleNotificationData(data), 1000);
-         }
-      });
-
-      // Foreground notification: show an in-app Alert
-      // (system banner won't show when app is open on some OS versions)
-      const unsubForeground = subscribeToForegroundNotifications(
-         ({ title, body, data }) => {
-            Alert.alert(title || "VedicMate", body || "", [
-               { text: "Dismiss", style: "cancel" },
-               { text: "View", onPress: () => handleNotificationData(data) },
-            ]);
-         },
-      );
-
-      // Background/killed tap handler
-      const unsubResponse = subscribeToNotificationResponse(
-         handleNotificationData,
-      );
-
-      return () => {
-         unsubForeground();
-         unsubResponse();
-      };
-   }, [token]);
-
-   return null;
+  return null;
 }
 
 // Initializes RevenueCat and fetches premium status only after login.
 // Separated into its own component so it re-renders when token changes.
 function PremiumInit() {
-   const dispatch = useDispatch();
-   const token = useSelector(selectToken);
-   const user = useSelector(selectUser);
-   const prevTokenRef = useRef(null);
+  const dispatch = useDispatch();
+  const token = useSelector(selectToken);
+  const user = useSelector(selectUser);
+  const prevTokenRef = useRef(null);
 
-   // Configure RC once on mount
-   useEffect(() => {
+  // useEffect(() => {
+  //   // Guard — Purchases is null in Expo Go
+  //   if (Purchases && process.env.EXPO_PUBLIC_REVENUECAT_KEY) {
+  //     Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY });
+  //   }
+  // }, []);
+
+  useEffect(() => {
+    try {
       if (process.env.EXPO_PUBLIC_REVENUECAT_KEY) {
-         Purchases.configure({
-            apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY,
-         });
+        Purchases.configure({
+          apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY,
+        });
       }
-   }, []);
+    } catch (e) {
+      console.log("[RC] Skipping configure in Expo Go:", e.message);
+    }
+  }, []);
 
-   // Login/logout RC when auth state changes
-   useEffect(() => {
-      const wasLoggedIn = !!prevTokenRef.current;
-      const isNowLoggedIn = !!token;
-      prevTokenRef.current = token;
+  useEffect(() => {
+    const wasLoggedIn = !!prevTokenRef.current;
+    const isNowLoggedIn = !!token;
+    prevTokenRef.current = token;
 
-      if (isNowLoggedIn && !wasLoggedIn) {
-         // User just logged in — identify them in RC
-         if (user?.id) {
-            Purchases.logIn(user.id)
-               .then(() => console.log("[RC] Logged in user:", user.id))
-               .catch((err) => console.warn("[RC] Login error:", err.message));
-         }
-         dispatch(fetchPremiumStatus());
-      } else if (!isNowLoggedIn && wasLoggedIn) {
-         // User logged out — reset RC
-         Purchases.logOut()
-            .then(() => console.log("[RC] Logged out"))
-            .catch(() => {});
-         dispatch(resetPremium());
+    if (isNowLoggedIn && !wasLoggedIn) {
+      if (Purchases && user?.id) {
+        // ← guard
+        Purchases.logIn(user.id)
+          .then(() => console.log("[RC] Logged in user:", user.id))
+          .catch((err) => console.warn("[RC] Login error:", err.message));
       }
-   }, [token, user?.id]);
+      dispatch(fetchPremiumStatus());
+    } else if (!isNowLoggedIn && wasLoggedIn) {
+      if (Purchases) {
+        // ← guard
+        Purchases.logOut()
+          .then(() => console.log("[RC] Logged out"))
+          .catch(() => {});
+      }
+      dispatch(resetPremium());
+    }
+  }, [token, user?.id]);
 
-   return null;
+  return null;
 }
 
-// Core app setup: fonts, auth restore, push registration, badge clearing
+// Inner app — has access to theme
 function InnerApp() {
-   const dispatch = useDispatch();
-   const loading = useSelector(selectIsLoading);
-   const token = useSelector(selectToken);
-   const appState = useRef(AppState.currentState);
+  const dispatch = useDispatch();
+  const loading = useSelector(selectIsLoading);
+  const token = useSelector(selectToken);
+  const appState = useRef(AppState.currentState);
+  const { isDark } = useTheme();
 
-   const [fontsLoaded] = useFonts({
-      Cinzel_600SemiBold,
-      Cinzel_700Bold,
-      Nunito_400Regular,
-      Nunito_600SemiBold,
-      Nunito_700Bold,
-   });
+  const [fontsLoaded] = useFonts({
+    Cinzel_600SemiBold,
+    Cinzel_700Bold,
+    Nunito_400Regular,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+  });
 
-   // Restore session from AsyncStorage on app launch
-   useEffect(() => {
-      console.log("[ROOT LAYOUT] App mounted — initializing auth...");
-      dispatch(initAuth());
-   }, []);
+  useEffect(() => {
+    dispatch(initAuth());
+  }, []);
 
-   // Register for push notifications after auth is confirmed
-   useEffect(() => {
-      if (!loading && token) {
-         console.log("[ROOT LAYOUT] Auth ready — registering for push...");
-         registerForPushNotifications();
+  useEffect(() => {
+    if (!loading && token) registerForPushNotifications();
+  }, [loading, token]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextState === "active"
+      ) {
+        clearBadgeCount();
       }
-   }, [loading, token]);
+      appState.current = nextState;
+    });
+    return () => sub.remove();
+  }, []);
 
-   // Clear notification badge count when app comes to foreground
-   useEffect(() => {
-      const sub = AppState.addEventListener("change", (nextState) => {
-         if (
-            appState.current.match(/inactive|background/) &&
-            nextState === "active"
-         ) {
-            clearBadgeCount();
-         }
-         appState.current = nextState;
-      });
-      return () => sub.remove();
-   }, []);
+  useEffect(() => {
+    if (!loading && fontsLoaded) SplashScreen.hideAsync();
+  }, [loading, fontsLoaded]);
 
-   // Hide splash screen once fonts and auth check are both complete
-   useEffect(() => {
-      if (!loading && fontsLoaded) {
-         console.log("[ROOT LAYOUT] Ready — hiding splash screen");
-         SplashScreen.hideAsync();
-      }
-   }, [loading, fontsLoaded]);
+  if (loading || !fontsLoaded) return null;
 
-   if (loading || !fontsLoaded) return null;
-
-   return (
-      <>
-         <StatusBar style="light" />
-         <NetworkBanner />
-         <NavigationGuard />
-         <PushNotificationHandler />
-         <PremiumInit />
-         <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(onboarding)" />
-            <Stack.Screen name="(tabs)" />
-         </Stack>
-      </>
-   );
+  return (
+    <>
+      {/* StatusBar adapts to current theme */}
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <NetworkBanner />
+      <NavigationGuard />
+      <PushNotificationHandler />
+      <PremiumInit />
+      <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(onboarding)" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
 export default function RootLayout() {
-   return (
-      <Provider store={store}>
-         <InnerApp />
-      </Provider>
-   );
+  return (
+    // ThemeProvider wraps everything — MUST be outside Provider so it
+    // persists across Redux resets (logout), and inside because components
+    // may need both Redux and theme
+    <Provider store={store}>
+      <ThemeProvider>
+        <InnerApp />
+      </ThemeProvider>
+    </Provider>
+  );
 }
