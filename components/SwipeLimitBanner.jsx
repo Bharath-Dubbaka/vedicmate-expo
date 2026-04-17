@@ -1,82 +1,40 @@
 // components/SwipeLimitBanner.jsx
 // ─────────────────────────────────────────────────────────────────────────────
-// SPRINT 3 — Swipe limit banner for the Discover screen
-//
-// Shows remaining swipes for free users. At 0, shows the upgrade prompt.
-// Premium users see nothing (returns null).
-//
-// HOW TO ADD TO discover.jsx:
-//   1. Import at top:
-//      import SwipeLimitBanner from "@components/SwipeLimitBanner";
-//      import PaywallModal from "@components/PaywallModal";
-//      import { usePremium } from "../../hooks/usePremium";
-//
-//   2. Inside DiscoverScreen(), add:
-//      const { isPremium, swipesRemaining, swipesAllowed, decrementSwipe } = usePremium();
-//      const [showPaywall, setShowPaywall] = useState(false);
-//
-//   3. In handleLike, wrap with swipe check:
-//      const handleLike = useCallback(async (profile) => {
-//         if (!swipesAllowed && !isPremium) {
-//            setShowPaywall(true);
-//            return;
-//         }
-//         decrementSwipe(); // optimistic UI update
-//         dispatch(removeProfile(profile.user.id));
-//         ... rest of existing code
-//
-//   4. In handlePass similarly:
-//      const handlePass = useCallback((profile) => {
-//         if (!swipesAllowed && !isPremium) {
-//            setShowPaywall(true);
-//            return;
-//         }
-//         decrementSwipe();
-//         ... rest of existing code
-//
-//   5. Add banner just below the header View in the return:
-//      <SwipeLimitBanner
-//         remaining={swipesRemaining}
-//         isPremium={isPremium}
-//         onUpgrade={() => setShowPaywall(true)}
-//      />
-//
-//   6. Add modal at the bottom of return (before closing View):
-//      <PaywallModal
-//         visible={showPaywall}
-//         onClose={() => setShowPaywall(false)}
-//         triggerReason="swipe_limit"
-//      />
+// HOOK FIX: All hooks (useRef, useEffect) are now called unconditionally
+// at the top level — no more conditional hook calls which caused the
+// "React has detected a change in order of Hooks" error.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useRef, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-} from "react-native";
+import { View, Text, TouchableOpacity, Animated } from "react-native";
 import { useTheme } from "../context/ThemeContext";
+import { rf, rs, rp } from "../constants/responsive";
 
 const FREE_DAILY_LIMIT = 15;
 
 export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const { COLORS, FONTS, RADIUS } = useTheme();
 
-  if (isPremium) return null;
-  if (remaining === null || remaining === undefined) return null;
-  if (remaining > 10) return null;
-
+  // ── ALL hooks called unconditionally at top level ─────────────────────────
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Only animate if we should be visible
+    if (
+      isPremium ||
+      remaining === null ||
+      remaining === undefined ||
+      remaining > 10
+    )
+      return;
+
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
       useNativeDriver: true,
     }).start();
+
     if (remaining === 0) {
       Animated.sequence([
         Animated.timing(shakeAnim, {
@@ -106,7 +64,13 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
         }),
       ]).start();
     }
-  }, [remaining]);
+  }, [remaining, isPremium]);
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Early returns AFTER all hooks
+  if (isPremium) return null;
+  if (remaining === null || remaining === undefined) return null;
+  if (remaining > 10) return null;
 
   const isLimitReached = remaining === 0;
   const isLow = remaining <= 3;
@@ -119,20 +83,20 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
 
   return (
     <Animated.View
-      style={[
-        {
-          marginHorizontal: SPACING.xl,
-          marginBottom: SPACING.sm,
-          backgroundColor: COLORS.bgCard,
-          borderRadius: RADIUS.lg,
-          borderWidth: 1,
-          borderColor: isLimitReached ? COLORS.rose + "50" : COLORS.border,
-          padding: SPACING.md,
-          opacity: fadeAnim,
-          transform: [{ translateX: shakeAnim }],
-        },
-        isLimitReached && { backgroundColor: COLORS.rose + "10" },
-      ]}
+      style={{
+        marginHorizontal: rs(20),
+        marginBottom: rs(8),
+        backgroundColor: COLORS.bgCard,
+        borderRadius: RADIUS.lg,
+        borderWidth: 1,
+        borderColor: isLimitReached ? COLORS.rose + "50" : COLORS.border,
+        padding: rp(12),
+        opacity: fadeAnim,
+        transform: [{ translateX: shakeAnim }],
+        // Ensure it stays above other content
+        zIndex: 10,
+        ...(isLimitReached && { backgroundColor: COLORS.rose + "10" }),
+      }}
     >
       {isLimitReached ? (
         <View
@@ -140,23 +104,23 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 8,
+            gap: rs(8),
           }}
         >
           <View
             style={{
               flexDirection: "row",
               alignItems: "center",
-              gap: 8,
+              gap: rs(8),
               flex: 1,
             }}
           >
-            <Text style={{ fontSize: 20 }}>🌟</Text>
+            <Text style={{ fontSize: rf(18) }}>🌟</Text>
             <View>
               <Text
                 style={{
                   fontFamily: FONTS.bodyMedium,
-                  fontSize: 13,
+                  fontSize: rf(13),
                   color: COLORS.textPrimary,
                   marginBottom: 1,
                 }}
@@ -166,7 +130,7 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
               <Text
                 style={{
                   fontFamily: FONTS.body,
-                  fontSize: 11,
+                  fontSize: rf(11),
                   color: COLORS.textSecondary,
                 }}
               >
@@ -178,8 +142,8 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
             style={{
               backgroundColor: COLORS.gold,
               borderRadius: RADIUS.md,
-              paddingHorizontal: SPACING.md,
-              paddingVertical: SPACING.sm,
+              paddingHorizontal: rp(12),
+              paddingVertical: rp(6),
             }}
             onPress={onUpgrade}
             activeOpacity={0.85}
@@ -187,8 +151,8 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
             <Text
               style={{
                 fontFamily: FONTS.bodyBold,
-                fontSize: 12,
-                color: COLORS.bg,
+                fontSize: rf(12),
+                color: COLORS.isDarkMode ? "#fff" : COLORS.bg,
               }}
             >
               Upgrade ✨
@@ -196,7 +160,7 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={{ gap: 6 }}>
+        <View style={{ gap: rs(6) }}>
           <View
             style={{
               flexDirection: "row",
@@ -207,7 +171,7 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
             <Text
               style={{
                 fontFamily: FONTS.bodyMedium,
-                fontSize: 12,
+                fontSize: rf(12),
                 color: isLow ? "#FB923C" : COLORS.textSecondary,
               }}
             >
@@ -217,7 +181,7 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
               <Text
                 style={{
                   fontFamily: FONTS.bodyMedium,
-                  fontSize: 11,
+                  fontSize: rf(11),
                   color: COLORS.gold,
                 }}
               >
@@ -227,7 +191,7 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
           </View>
           <View
             style={{
-              height: 3,
+              height: rs(3),
               backgroundColor: COLORS.border,
               borderRadius: 2,
               overflow: "hidden",
@@ -235,7 +199,7 @@ export default function SwipeLimitBanner({ remaining, isPremium, onUpgrade }) {
           >
             <View
               style={{
-                height: 3,
+                height: rs(3),
                 width: barWidth,
                 backgroundColor: barColor,
                 borderRadius: 2,

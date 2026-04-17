@@ -38,15 +38,7 @@ import {
   clearBadgeCount,
 } from "../services/notifications";
 import { fetchPremiumStatus, resetPremium } from "../store/slices/premiumSlice";
-// import Purchases from "react-native-purchases";
-
-let Purchases = null;
-try {
-  Purchases = require("react-native-purchases").default;
-} catch (e) {
-  console.log("[RC] react-native-purchases not available in Expo Go");
-}
-import NetworkBanner from "../components/NetworkBanner";
+import Purchases from "react-native-purchases";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 
 SplashScreen.preventAutoHideAsync();
@@ -86,21 +78,17 @@ function PushNotificationHandler() {
 
   const handleNotificationData = (data) => {
     if (!data || !token) return;
-    if (data.type === "match" && data.matchId) {
-      router.push("/(tabs)/matches");
-    } else if (data.type === "message" && data.matchId) {
+    if (data.type === "match" && data.matchId) router.push("/(tabs)/matches");
+    else if (data.type === "message" && data.matchId)
       router.push(`/(tabs)/chat/${data.matchId}`);
-    } else if (data.type === "liked") {
-      router.push("/(tabs)/matches");
-    }
+    else if (data.type === "liked") router.push("/(tabs)/matches");
   };
 
   useEffect(() => {
     if (!token) return;
     getInitialNotification().then((data) => {
-      if (data && Object.keys(data).length > 0) {
+      if (data && Object.keys(data).length > 0)
         setTimeout(() => handleNotificationData(data), 1000);
-      }
     });
     const unsubForeground = subscribeToForegroundNotifications(
       ({ title, body, data }) => {
@@ -130,22 +118,22 @@ function PremiumInit() {
   const user = useSelector(selectUser);
   const prevTokenRef = useRef(null);
 
-  // useEffect(() => {
-  //   // Guard — Purchases is null in Expo Go
-  //   if (Purchases && process.env.EXPO_PUBLIC_REVENUECAT_KEY) {
-  //     Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY });
-  //   }
-  // }, []);
-
   useEffect(() => {
+    const isExpoGo =
+      typeof __DEV__ !== "undefined" &&
+      global.expo?.modules?.ExpoModulesCore === undefined;
+
+    if (isExpoGo) {
+      console.log("[RC] Expo Go detected — skipping configure");
+      return;
+    }
+
     try {
       if (process.env.EXPO_PUBLIC_REVENUECAT_KEY) {
-        Purchases.configure({
-          apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY,
-        });
+        Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY });
       }
     } catch (e) {
-      console.log("[RC] Skipping configure in Expo Go:", e.message);
+      console.log("[RC] Configure error:", e.message);
     }
   }, []);
 
@@ -155,20 +143,20 @@ function PremiumInit() {
     prevTokenRef.current = token;
 
     if (isNowLoggedIn && !wasLoggedIn) {
-      if (Purchases && user?.id) {
-        // ← guard
-        Purchases.logIn(user.id)
-          .then(() => console.log("[RC] Logged in user:", user.id))
-          .catch((err) => console.warn("[RC] Login error:", err.message));
+      if (user?.id) {
+        try {
+          Purchases.logIn(user.id)
+            .then(() => console.log("[RC] Logged in user:", user.id))
+            .catch((err) => console.warn("[RC] Login error:", err.message));
+        } catch {}
       }
       dispatch(fetchPremiumStatus());
     } else if (!isNowLoggedIn && wasLoggedIn) {
-      if (Purchases) {
-        // ← guard
+      try {
         Purchases.logOut()
           .then(() => console.log("[RC] Logged out"))
           .catch(() => {});
-      }
+      } catch {}
       dispatch(resetPremium());
     }
   }, [token, user?.id]);
@@ -205,9 +193,8 @@ function InnerApp() {
       if (
         appState.current.match(/inactive|background/) &&
         nextState === "active"
-      ) {
+      )
         clearBadgeCount();
-      }
       appState.current = nextState;
     });
     return () => sub.remove();
@@ -221,9 +208,9 @@ function InnerApp() {
 
   return (
     <>
-      {/* StatusBar adapts to current theme */}
-      <StatusBar style={isDark ? "light" : "dark"} />
-      <NetworkBanner />
+      {/* isDark = Night mode (parchment) → dark content on light bg */}
+      <StatusBar style={isDark ? "dark" : "dark"} />
+      {/* NetworkBanner intentionally removed */}
       <NavigationGuard />
       <PushNotificationHandler />
       <PremiumInit />
@@ -241,9 +228,6 @@ function InnerApp() {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function RootLayout() {
   return (
-    // ThemeProvider wraps everything — MUST be outside Provider so it
-    // persists across Redux resets (logout), and inside because components
-    // may need both Redux and theme
     <Provider store={store}>
       <ThemeProvider>
         <InnerApp />

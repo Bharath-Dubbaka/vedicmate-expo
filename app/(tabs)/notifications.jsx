@@ -7,7 +7,6 @@
 // for initial version. Each item is a tap-to-navigate card.
 // ─────────────────────────────────────────────────────────────────────────────
 
-
 import { useState, useCallback, useEffect } from "react";
 import {
   View,
@@ -16,21 +15,23 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  SafeAreaView,
-  Image,
+  Alert,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useTheme } from "../../context/ThemeContext";
 import { matchingAPI } from "../../services/api";
 import { useSelector } from "react-redux";
 import { selectMatches } from "../../store/slices/matchesSlice";
+import BrandHeader from "../../components/BrandHeader";
+import { rf, rs, rp } from "../../constants/responsive";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// ── Notification types ────────────────────────────────────────────────────────
+const CLEARED_KEY = "vedicfind_cleared_notifications";
+
 function buildNotifications(matches, likedMe, viewedMe) {
   const items = [];
   const now = new Date();
 
-  // New matches (last 7 days)
   for (const m of matches) {
     if (m.matchedAt) {
       items.push({
@@ -38,14 +39,12 @@ function buildNotifications(matches, likedMe, viewedMe) {
         type: "match",
         title: "💫 New Cosmic Match!",
         body: `You and ${m.user?.name} are cosmically connected — ${m.compatibility?.gunaScore}/36 Gunas`,
-        photo: m.user?.photo,
         navigateTo: `/(tabs)/chat/${m.matchId}`,
         time: new Date(m.matchedAt),
       });
     }
   }
 
-  // People who liked you (premium shows real, free shows count)
   if (likedMe.length > 0) {
     items.push({
       id: "likes_batch",
@@ -54,13 +53,11 @@ function buildNotifications(matches, likedMe, viewedMe) {
       body: `${likedMe.length} person${
         likedMe.length > 1 ? "s" : ""
       } liked your profile`,
-      photo: likedMe[0]?.photos?.[0] || null,
       navigateTo: "/(tabs)/matches",
       time: now,
     });
   }
 
-  // Profile views (premium)
   if (viewedMe.length > 0) {
     items.push({
       id: "views_batch",
@@ -69,13 +66,11 @@ function buildNotifications(matches, likedMe, viewedMe) {
       body: `${viewedMe.length} person${
         viewedMe.length > 1 ? "s" : ""
       } viewed your profile`,
-      photo: viewedMe[0]?.photos?.[0] || null,
       navigateTo: "/(tabs)/matches",
       time: now,
     });
   }
 
-  // Sort by time, newest first
   items.sort((a, b) => b.time - a.time);
   return items;
 }
@@ -87,145 +82,146 @@ function timeAgo(date) {
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ── Single notification card ─────────────────────────────────────────────────
-function NotifCard({ item, onPress }) {
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
-
+function NotifCard({ item, onPress, onDelete }) {
+  const { COLORS, FONTS, RADIUS } = useTheme();
   const typeColors = {
     match: COLORS.gold,
     likes: COLORS.rose,
-    views: COLORS.teal,
-    message: COLORS.manushya,
+    views: COLORS.teal || "#4ECDC4",
   };
   const accent = typeColors[item.type] || COLORS.gold;
 
   return (
-    <TouchableOpacity
+    <View
       style={{
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 14,
-        paddingHorizontal: SPACING.xl,
+        paddingVertical: rp(12),
+        paddingHorizontal: rp(20),
         borderBottomWidth: 1,
         borderBottomColor: COLORS.border,
-        gap: SPACING.md,
+        gap: rs(12),
       }}
-      onPress={() => onPress(item)}
-      activeOpacity={0.7}
     >
-      {/* Avatar / placeholder */}
-      <View style={{ position: "relative" }}>
-        {item.photo ? (
-          <Image
-            source={{ uri: item.photo }}
-            style={{ width: 50, height: 50, borderRadius: 25 }}
-          />
-        ) : (
-          <View
-            style={{
-              width: 50,
-              height: 50,
-              borderRadius: 25,
-              backgroundColor: COLORS.bgElevated,
-              alignItems: "center",
-              justifyContent: "center",
-              borderWidth: 1.5,
-              borderColor: accent,
-            }}
-          >
-            <Text style={{ fontSize: 22 }}>
-              {item.type === "match"
-                ? "💫"
-                : item.type === "likes"
-                ? "❤️"
-                : item.type === "views"
-                ? "👁"
-                : "💬"}
-            </Text>
-          </View>
-        )}
-        {/* Accent dot */}
-        <View
-          style={{
-            position: "absolute",
-            bottom: 0,
-            right: 0,
-            width: 14,
-            height: 14,
-            borderRadius: 7,
-            backgroundColor: accent,
-            borderWidth: 2,
-            borderColor: COLORS.bg,
-          }}
-        />
-      </View>
-
-      {/* Content */}
-      <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            fontFamily: FONTS.bodyMedium,
-            fontSize: 14,
-            color: COLORS.textPrimary,
-            marginBottom: 2,
-          }}
-        >
-          {item.title}
-        </Text>
-        <Text
-          style={{
-            fontFamily: FONTS.body,
-            fontSize: 12,
-            color: COLORS.textSecondary,
-            lineHeight: 17,
-          }}
-          numberOfLines={2}
-        >
-          {item.body}
-        </Text>
-      </View>
-
-      {/* Time */}
-      <Text
+      {/* Icon */}
+      <TouchableOpacity
+        onPress={() => onPress(item)}
+        activeOpacity={0.7}
         style={{
-          fontFamily: FONTS.body,
-          fontSize: 11,
-          color: COLORS.textDim,
-          flexShrink: 0,
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: rs(12),
         }}
       >
-        {timeAgo(item.time)}
-      </Text>
-    </TouchableOpacity>
+        <View
+          style={{
+            width: rs(44),
+            height: rs(44),
+            borderRadius: rs(22),
+            backgroundColor: accent + "20",
+            borderWidth: 1.5,
+            borderColor: accent + "50",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ fontSize: rf(20) }}>
+            {item.type === "match" ? "💫" : item.type === "likes" ? "❤️" : "👁"}
+          </Text>
+        </View>
+
+        {/* Content */}
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              fontFamily: FONTS.bodyMedium,
+              fontSize: rf(14),
+              color: COLORS.textPrimary,
+              marginBottom: rp(2),
+            }}
+          >
+            {item.title}
+          </Text>
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: rf(12),
+              color: COLORS.textSecondary,
+              lineHeight: rf(17),
+            }}
+            numberOfLines={2}
+          >
+            {item.body}
+          </Text>
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: rf(11),
+              color: COLORS.textDim,
+              marginTop: rp(4),
+            }}
+          >
+            {timeAgo(item.time)}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      {/* Delete button */}
+      <TouchableOpacity
+        onPress={() => onDelete(item.id)}
+        style={{
+          padding: rp(8),
+          borderRadius: RADIUS.full,
+          backgroundColor: COLORS.bgElevated,
+        }}
+      >
+        <Text style={{ fontSize: rf(14), color: COLORS.textDim }}>✕</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
-// ── Main screen ──────────────────────────────────────────────────────────────
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { COLORS, FONTS, SPACING } = useTheme();
+  const { COLORS, FONTS, RADIUS } = useTheme();
   const matches = useSelector(selectMatches);
 
   const [likedMe, setLikedMe] = useState([]);
   const [viewedMe, setViewedMe] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [clearedIds, setClearedIds] = useState(new Set());
+
+  // Load cleared IDs from storage
+  useEffect(() => {
+    AsyncStorage.getItem(CLEARED_KEY)
+      .then((val) => {
+        if (val) setClearedIds(new Set(JSON.parse(val)));
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveClearedIds = async (ids) => {
+    try {
+      await AsyncStorage.setItem(CLEARED_KEY, JSON.stringify([...ids]));
+    } catch {}
+  };
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [likedRes, viewedRes] = await Promise.all([
+      const [a, b] = await Promise.all([
         matchingAPI.getLikedMe(),
         matchingAPI.getViewedMe(),
       ]);
-      setLikedMe(likedRes.data.users ?? []);
-      setViewedMe(viewedRes.data.users ?? []);
+      setLikedMe(a.data.users ?? []);
+      setViewedMe(b.data.users ?? []);
     } catch (err) {
-      console.error("[NOTIFICATIONS] Load error:", err.message);
+      console.error("[NOTIFICATIONS]", err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -241,43 +237,68 @@ export default function NotificationsScreen() {
     load();
   }, []);
 
-  const notifications = buildNotifications(matches, likedMe, viewedMe);
+  const allNotifications = buildNotifications(matches, likedMe, viewedMe);
+  const notifications = allNotifications.filter((n) => !clearedIds.has(n.id));
+
+  const handleDelete = (id) => {
+    const next = new Set(clearedIds);
+    next.add(id);
+    setClearedIds(next);
+    saveClearedIds(next);
+  };
+
+  const handleClearAll = () => {
+    if (notifications.length === 0) return;
+    Alert.alert("Clear all?", "Remove all notifications?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Clear All",
+        style: "destructive",
+        onPress: () => {
+          const next = new Set(clearedIds);
+          allNotifications.forEach((n) => next.add(n.id));
+          setClearedIds(next);
+          saveClearedIds(next);
+        },
+      },
+    ]);
+  };
 
   const handlePress = (item) => {
     router.push(item.navigateTo);
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      {/* Header */}
-      <View
-        style={{
-          paddingHorizontal: SPACING.xl,
-          paddingTop: 52,
-          paddingBottom: SPACING.md,
-        }}
-      >
-        <Text
-          style={{
-            fontFamily: FONTS.headingBold,
-            fontSize: 16,
-            color: COLORS.gold,
-            letterSpacing: 4,
-          }}
-        >
-          ACTIVITY
-        </Text>
-        <Text
-          style={{
-            fontFamily: FONTS.body,
-            fontSize: 12,
-            color: COLORS.textSecondary,
-            marginTop: 2,
-          }}
-        >
-          Your recent cosmic connections
-        </Text>
-      </View>
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <BrandHeader
+        title="ACTIVITY"
+        subtitle="Your recent cosmic connections"
+        right={
+          notifications.length > 0 ? (
+            <TouchableOpacity
+              onPress={handleClearAll}
+              style={{
+                paddingHorizontal: rp(10),
+                paddingVertical: rp(5),
+                borderRadius: RADIUS.md,
+                borderWidth: 1,
+                borderColor: COLORS.rose + "60",
+                backgroundColor: COLORS.rose + "10",
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: rf(12),
+                  color: COLORS.rose,
+                }}
+              >
+                Clear all
+              </Text>
+            </TouchableOpacity>
+          ) : null
+        }
+      />
 
       {loading ? (
         <View
@@ -287,9 +308,9 @@ export default function NotificationsScreen() {
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 14,
+              fontSize: rf(14),
               color: COLORS.textSecondary,
-              marginTop: SPACING.md,
+              marginTop: rs(16),
             }}
           >
             Reading the stars...
@@ -300,7 +321,11 @@ export default function NotificationsScreen() {
           data={notifications}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <NotifCard item={item} onPress={handlePress} />
+            <NotifCard
+              item={item}
+              onPress={handlePress}
+              onDelete={handleDelete}
+            />
           )}
           refreshControl={
             <RefreshControl
@@ -319,17 +344,17 @@ export default function NotificationsScreen() {
                 flex: 1,
                 alignItems: "center",
                 justifyContent: "center",
-                paddingTop: 80,
-                paddingHorizontal: SPACING.xl,
+                paddingTop: rp(80),
+                paddingHorizontal: rp(40),
               }}
             >
-              <Text style={{ fontSize: 48, marginBottom: SPACING.md }}>🌌</Text>
+              <Text style={{ fontSize: rf(48), marginBottom: rs(16) }}>🌌</Text>
               <Text
                 style={{
                   fontFamily: FONTS.heading,
-                  fontSize: 20,
+                  fontSize: rf(20),
                   color: COLORS.textPrimary,
-                  marginBottom: SPACING.sm,
+                  marginBottom: rs(8),
                   textAlign: "center",
                 }}
               >
@@ -338,10 +363,10 @@ export default function NotificationsScreen() {
               <Text
                 style={{
                   fontFamily: FONTS.body,
-                  fontSize: 14,
+                  fontSize: rf(14),
                   color: COLORS.textSecondary,
                   textAlign: "center",
-                  lineHeight: 21,
+                  lineHeight: rf(21),
                 }}
               >
                 When someone likes or matches with you, it will appear here
@@ -350,6 +375,6 @@ export default function NotificationsScreen() {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }

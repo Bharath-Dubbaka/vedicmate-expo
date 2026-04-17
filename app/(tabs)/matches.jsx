@@ -14,9 +14,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  SafeAreaView,
   Animated,
-  Dimensions,
+  StyleSheet,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useDispatch, useSelector } from "react-redux";
@@ -32,21 +31,12 @@ import PaywallModal from "./paywall";
 import { fetchProfiles } from "../../store/slices/discoverSlice";
 import CompatibilityModal from "../../components/CompatibilityModal";
 import BlockReportModal from "../../components/BlockReportModal";
-
-const { width: SCREEN_W } = Dimensions.get("window");
+import BrandHeader from "../../components/BrandHeader";
+import ProfileViewer from "../../components/ProfileViewer";
+import { rf, rs, rp } from "../../constants/responsive";
 
 function TopTabBar({ tabs, active, onSelect }) {
   const { COLORS, FONTS } = useTheme();
-  const indicatorX = useRef(new Animated.Value(0)).current;
-  const tabW = SCREEN_W / tabs.length;
-  useEffect(() => {
-    Animated.spring(indicatorX, {
-      toValue: active * tabW,
-      useNativeDriver: true,
-      tension: 80,
-      friction: 12,
-    }).start();
-  }, [active]);
   return (
     <View
       style={{
@@ -61,7 +51,7 @@ function TopTabBar({ tabs, active, onSelect }) {
           style={{
             flex: 1,
             alignItems: "center",
-            paddingVertical: 14,
+            paddingVertical: rp(12),
             position: "relative",
           }}
           onPress={() => onSelect(i)}
@@ -69,8 +59,8 @@ function TopTabBar({ tabs, active, onSelect }) {
         >
           <Text
             style={{
-              fontFamily: FONTS.body,
-              fontSize: 12,
+              fontFamily: FONTS.bodyMedium,
+              fontSize: rf(12),
               letterSpacing: 1.5,
               color: active === i ? COLORS.textPrimary : COLORS.textSecondary,
             }}
@@ -84,7 +74,7 @@ function TopTabBar({ tabs, active, onSelect }) {
                 bottom: 0,
                 left: "15%",
                 right: "15%",
-                height: 3,
+                height: rs(3),
                 borderRadius: 2,
                 backgroundColor: COLORS.gold,
               }}
@@ -97,27 +87,31 @@ function TopTabBar({ tabs, active, onSelect }) {
 }
 
 function SubTabBar({ tabs, active, onSelect }) {
-  const { COLORS, FONTS, SPACING } = useTheme();
+  const { COLORS, FONTS } = useTheme();
   return (
     <View
       style={{
         flexDirection: "row",
-        paddingHorizontal: SPACING.xl,
-        paddingTop: 12,
-        paddingBottom: 2,
+        paddingHorizontal: rp(20),
+        paddingTop: rp(12),
+        paddingBottom: rp(4),
       }}
     >
       {tabs.map((label, i) => (
         <TouchableOpacity
           key={label}
-          style={{ marginRight: 28, paddingBottom: 10, position: "relative" }}
+          style={{
+            marginRight: rs(24),
+            paddingBottom: rp(10),
+            position: "relative",
+          }}
           onPress={() => onSelect(i)}
           activeOpacity={0.7}
         >
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 12,
+              fontSize: rf(12),
               letterSpacing: 1.5,
               color: active === i ? COLORS.textPrimary : COLORS.textSecondary,
             }}
@@ -131,7 +125,7 @@ function SubTabBar({ tabs, active, onSelect }) {
                 bottom: 0,
                 left: 0,
                 right: 0,
-                height: 2,
+                height: rs(2),
                 backgroundColor: COLORS.gold,
                 borderRadius: 1,
               }}
@@ -143,46 +137,69 @@ function SubTabBar({ tabs, active, onSelect }) {
   );
 }
 
+// ── Match card ────────────────────────────────────────────────────────────────
 function MatchCard({ match, onPress, onPressCompat, onLongPress }) {
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const { COLORS, FONTS, RADIUS } = useTheme();
   const other = match.user ?? match.matchedUser;
   const photo = other?.photo ?? other?.photos?.[0];
   const unread = typeof match.unreadCount === "number" ? match.unreadCount : 0;
   const gunaScore = match.compatibility?.gunaScore ?? match.gunaScore;
+  const verdict = match.compatibility?.verdict ?? match.verdict ?? "";
+  const nakshatra =
+    other?.cosmicCard?.nakshatra || other?.kundli?.nakshatra || "";
+
+  const VERDICT_DOT = {
+    "Excellent Match": "#FFD700",
+    "Good Match": "#4ADE80",
+    "Average Match": "#FB923C",
+    "Challenging Match": "#F87171",
+  };
+  const dot = VERDICT_DOT[verdict] || COLORS.gold;
+
   return (
     <TouchableOpacity
       style={{
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 14,
+        paddingVertical: rp(12),
+        paddingHorizontal: rp(20),
         borderBottomWidth: 1,
         borderBottomColor: COLORS.border,
+        gap: rs(12),
       }}
       onPress={() => onPress(match)}
       onLongPress={() => onLongPress?.(match)}
       activeOpacity={0.8}
     >
-      <View style={{ position: "relative", marginRight: 14 }}>
+      <View style={{ position: "relative" }}>
         {photo ? (
           <Image
             source={{ uri: photo }}
-            style={{ width: 58, height: 58, borderRadius: 29 }}
+            style={{
+              width: rs(54),
+              height: rs(54),
+              borderRadius: rs(27),
+              borderWidth: 2,
+              borderColor: dot + "80",
+            }}
           />
         ) : (
           <View
             style={{
-              width: 58,
-              height: 58,
-              borderRadius: 29,
+              width: rs(54),
+              height: rs(54),
+              borderRadius: rs(27),
               backgroundColor: COLORS.bgElevated,
               alignItems: "center",
               justifyContent: "center",
+              borderWidth: 2,
+              borderColor: COLORS.border,
             }}
           >
             <Text
               style={{
                 fontFamily: FONTS.headingBold,
-                fontSize: 22,
+                fontSize: rf(20),
                 color: COLORS.gold,
               }}
             >
@@ -196,17 +213,23 @@ function MatchCard({ match, onPress, onPressCompat, onLongPress }) {
               position: "absolute",
               top: -2,
               right: -2,
-              minWidth: 18,
-              height: 18,
-              borderRadius: 9,
-              backgroundColor: COLORS.gold,
+              minWidth: rs(18),
+              height: rs(18),
+              borderRadius: rs(9),
+              backgroundColor: COLORS.rose,
               alignItems: "center",
               justifyContent: "center",
               paddingHorizontal: 3,
+              borderWidth: 1.5,
+              borderColor: COLORS.bg,
             }}
           >
             <Text
-              style={{ fontFamily: FONTS.body, fontSize: 10, color: COLORS.bg }}
+              style={{
+                fontFamily: FONTS.bodyBold,
+                fontSize: rf(9),
+                color: "#fff",
+              }}
             >
               {unread > 9 ? "9+" : unread}
             </Text>
@@ -219,16 +242,16 @@ function MatchCard({ match, onPress, onPressCompat, onLongPress }) {
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: 4,
+            marginBottom: rp(2),
           }}
         >
           <Text
             style={{
-              fontFamily: FONTS.bodyMedium,
-              fontSize: 15,
+              fontFamily: FONTS.bodyBold,
+              fontSize: rf(15),
               color: COLORS.textPrimary,
               flex: 1,
-              marginRight: 8,
+              marginRight: rs(8),
             }}
             numberOfLines={1}
           >
@@ -238,31 +261,56 @@ function MatchCard({ match, onPress, onPressCompat, onLongPress }) {
           {gunaScore != null && (
             <TouchableOpacity
               style={{
-                backgroundColor: COLORS.gold + "25",
-                borderRadius: 20,
-                paddingHorizontal: 8,
-                paddingVertical: 2,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: rs(4),
+                backgroundColor: dot + "15",
+                borderRadius: RADIUS.full,
+                paddingHorizontal: rp(8),
+                paddingVertical: rp(3),
+                borderWidth: 1,
+                borderColor: dot + "40",
               }}
               onPress={() => onPressCompat?.(match)}
               activeOpacity={0.7}
             >
+              <View
+                style={{
+                  width: rs(6),
+                  height: rs(6),
+                  borderRadius: rs(3),
+                  backgroundColor: dot,
+                }}
+              />
               <Text
                 style={{
-                  fontFamily: FONTS.body,
-                  fontSize: 11,
-                  color: COLORS.gold,
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: rf(11),
+                  color: dot,
                 }}
               >
-                {gunaScore}/36 ✦ ›
+                {gunaScore}/36
               </Text>
             </TouchableOpacity>
           )}
         </View>
+        {nakshatra ? (
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: rf(11),
+              color: COLORS.gold,
+              marginBottom: rp(2),
+            }}
+          >
+            ✦ {nakshatra}
+          </Text>
+        ) : null}
         {match.lastMessage ? (
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 13,
+              fontSize: rf(12),
               color: COLORS.textSecondary,
             }}
             numberOfLines={1}
@@ -275,7 +323,7 @@ function MatchCard({ match, onPress, onPressCompat, onLongPress }) {
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 13,
+              fontSize: rf(12),
               color: COLORS.textDim,
               fontStyle: "italic",
             }}
@@ -288,8 +336,9 @@ function MatchCard({ match, onPress, onPressCompat, onLongPress }) {
   );
 }
 
+// ── Locked card ───────────────────────────────────────────────────────────────
 function LockedCard({ user, onUnlock }) {
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const { COLORS, FONTS, RADIUS } = useTheme();
   const gana = user?.kundli?.gana;
   const GANA_COLOR = {
     Deva: COLORS.deva,
@@ -297,131 +346,161 @@ function LockedCard({ user, onUnlock }) {
     Rakshasa: COLORS.rakshasa,
   };
   const ganaColor = GANA_COLOR[gana] || COLORS.gold;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.06,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
   return (
-    <View
+    <TouchableOpacity
       style={{
-        flexDirection: "row",
-        backgroundColor: COLORS.bgCard,
-        borderRadius: RADIUS.md,
+        borderRadius: RADIUS.xl,
         overflow: "hidden",
-        marginBottom: 10,
+        marginBottom: rp(10),
+        height: rs(100),
         borderWidth: 1,
-        borderColor: COLORS.border,
+        borderColor: ganaColor + "30",
+        shadowColor: ganaColor,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        elevation: 6,
       }}
+      onPress={onUnlock}
+      activeOpacity={0.85}
     >
-      <View style={{ position: "relative", width: 90 }}>
+      <View style={StyleSheet.absoluteFill}>
         {user?.photos?.[0] ? (
           <Image
             source={{ uri: user.photos[0] }}
-            style={{ width: 90, height: 110 }}
-            blurRadius={25}
+            style={{ width: "100%", height: "100%" }}
+            resizeMode="cover"
+            blurRadius={18}
           />
         ) : (
-          <View
-            style={{
-              width: 90,
-              height: 110,
-              backgroundColor: COLORS.bgElevated,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: FONTS.headingBold,
-                fontSize: 28,
-                color: COLORS.textDim,
-              }}
-            >
-              ?
-            </Text>
-          </View>
+          <View style={{ flex: 1, backgroundColor: COLORS.bgElevated }} />
         )}
+        <View
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: "rgba(10,11,20,0.72)",
+          }}
+        />
         <View
           style={{
             position: "absolute",
             top: 0,
             left: 0,
             right: 0,
-            bottom: 0,
+            height: rs(3),
+            backgroundColor: ganaColor,
+          }}
+        />
+      </View>
+      <View
+        style={{
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: rp(16),
+          paddingVertical: rp(12),
+          gap: rs(12),
+        }}
+      >
+        <Animated.View
+          style={{
+            width: rs(44),
+            height: rs(44),
+            borderRadius: rs(22),
+            backgroundColor: ganaColor + "25",
+            borderWidth: 1.5,
+            borderColor: ganaColor + "60",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "rgba(10,11,20,0.5)",
+            transform: [{ scale: pulseAnim }],
           }}
         >
-          <Text style={{ fontSize: 20 }}>🔒</Text>
-        </View>
-      </View>
-      <View style={{ flex: 1, padding: 12, justifyContent: "center", gap: 6 }}>
-        <View
-          style={{
-            backgroundColor: COLORS.bgElevated,
-            borderRadius: 4,
-            paddingHorizontal: 6,
-            paddingVertical: 3,
-            alignSelf: "flex-start",
-          }}
-        >
-          <Text
-            style={{
-              fontFamily: FONTS.body,
-              fontSize: 14,
-              color: COLORS.bgElevated,
-              letterSpacing: 2,
-            }}
-          >
-            ████████
-          </Text>
-        </View>
-        {user?.kundli?.nakshatra && (
+          <Text style={{ fontSize: rf(20) }}>🔒</Text>
+        </Animated.View>
+        <View style={{ flex: 1 }}>
           <View
             style={{
-              alignSelf: "flex-start",
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-              borderRadius: 20,
-              backgroundColor: ganaColor + "20",
+              backgroundColor: "rgba(255,255,255,0.15)",
+              borderRadius: rs(4),
+              width: rs(80),
+              height: rs(12),
+              marginBottom: rp(6),
             }}
-          >
-            <Text
+          />
+          {user?.kundli?.nakshatra && (
+            <View
               style={{
-                fontFamily: FONTS.body,
-                fontSize: 11,
-                color: ganaColor,
-                letterSpacing: 0.5,
+                alignSelf: "flex-start",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: rs(4),
+                paddingHorizontal: rp(8),
+                paddingVertical: rp(3),
+                borderRadius: RADIUS.full,
+                backgroundColor: ganaColor + "30",
+                borderWidth: 1,
+                borderColor: ganaColor + "50",
               }}
             >
-              ✦ {user.kundli.nakshatra}
-            </Text>
-          </View>
-        )}
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: rf(11),
+                  color: ganaColor,
+                }}
+              >
+                ✦ {user.kundli.nakshatra}
+              </Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity
           style={{
-            backgroundColor: COLORS.gold,
-            borderRadius: RADIUS.sm,
-            paddingHorizontal: 12,
-            paddingVertical: 5,
-            alignSelf: "flex-start",
+            backgroundColor: ganaColor,
+            borderRadius: RADIUS.md,
+            paddingHorizontal: rp(14),
+            paddingVertical: rp(8),
           }}
           onPress={onUnlock}
+          activeOpacity={0.85}
         >
           <Text
             style={{
               fontFamily: FONTS.bodyBold,
-              fontSize: 12,
-              color: COLORS.bg,
+              fontSize: rf(12),
+              color: "#fff",
             }}
           >
-            Unlock ✨
+            Reveal ✨
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
-function RequestCard({ user, onPress }) {
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+// ── Profile card (revealed — premium) ────────────────────────────────────────
+// Tappable → opens full ProfileViewer with compatibility + Send Like button
+function RevealedCard({ user, onPress, badge }) {
+  const { COLORS, FONTS, RADIUS } = useTheme();
   const gana = user?.kundli?.gana;
   const GANA_COLOR = {
     Deva: COLORS.deva,
@@ -429,92 +508,159 @@ function RequestCard({ user, onPress }) {
     Rakshasa: COLORS.rakshasa,
   };
   const ganaColor = GANA_COLOR[gana] || COLORS.gold;
+
   return (
     <TouchableOpacity
       style={{
-        flexDirection: "row",
-        backgroundColor: COLORS.bgCard,
-        borderRadius: RADIUS.md,
+        borderRadius: RADIUS.xl,
         overflow: "hidden",
-        marginBottom: 10,
+        marginBottom: rp(10),
+        height: rs(110),
         borderWidth: 1,
-        borderColor: COLORS.border,
+        borderColor: ganaColor + "50",
+        shadowColor: ganaColor,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+        elevation: 5,
       }}
       onPress={() => onPress?.(user)}
-      activeOpacity={0.8}
+      activeOpacity={0.85}
     >
-      {user?.photos?.[0] ? (
-        <Image
-          source={{ uri: user.photos[0] }}
-          style={{ width: 90, height: 110 }}
-        />
-      ) : (
+      <View style={StyleSheet.absoluteFill}>
+        {user?.photos?.[0] ? (
+          <Image
+            source={{ uri: user.photos[0] }}
+            style={{ width: "100%", height: "100%" }}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={{ flex: 1, backgroundColor: ganaColor + "20" }} />
+        )}
         <View
           style={{
-            width: 90,
-            height: 110,
-            backgroundColor: COLORS.bgElevated,
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: user?.photos?.[0]
+              ? "rgba(0,0,0,0.4)"
+              : "rgba(0,0,0,0.05)",
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: rs(3),
+            backgroundColor: ganaColor,
+          }}
+        />
+      </View>
+      <View
+        style={{
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: rp(16),
+          paddingVertical: rp(12),
+          gap: rs(12),
+        }}
+      >
+        <View
+          style={{
+            width: rs(48),
+            height: rs(48),
+            borderRadius: rs(24),
+            borderWidth: 2,
+            borderColor: ganaColor,
+            backgroundColor: "rgba(255,255,255,0.1)",
+            overflow: "hidden",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
+          {user?.photos?.[0] ? (
+            <Image
+              source={{ uri: user.photos[0] }}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text
+              style={{
+                fontFamily: FONTS.headingBold,
+                fontSize: rf(18),
+                color: ganaColor,
+              }}
+            >
+              {user?.name?.[0]?.toUpperCase() ?? "?"}
+            </Text>
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
           <Text
             style={{
-              fontFamily: FONTS.headingBold,
-              fontSize: 28,
-              color: COLORS.textDim,
+              fontFamily: FONTS.bodyBold,
+              fontSize: rf(15),
+              color: user?.photos?.[0] ? "#fff" : COLORS.textPrimary,
+              marginBottom: rp(3),
             }}
+            numberOfLines={1}
           >
-            {user?.name?.[0]?.toUpperCase() ?? "?"}
+            {user?.name ?? "—"}
+            {user?.age ? `, ${user.age}` : ""}
           </Text>
+          {user?.kundli?.nakshatra && (
+            <View
+              style={{
+                alignSelf: "flex-start",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: rs(4),
+                paddingHorizontal: rp(8),
+                paddingVertical: rp(2),
+                borderRadius: RADIUS.full,
+                backgroundColor: ganaColor + (user?.photos?.[0] ? "40" : "20"),
+                borderWidth: 1,
+                borderColor: ganaColor + "60",
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: rf(11),
+                  color: user?.photos?.[0] ? "#fff" : ganaColor,
+                }}
+              >
+                ✦ {user.kundli.nakshatra}
+              </Text>
+            </View>
+          )}
         </View>
-      )}
-      <View style={{ flex: 1, padding: 12, justifyContent: "center", gap: 5 }}>
-        <Text
-          style={{
-            fontFamily: FONTS.bodyMedium,
-            fontSize: 15,
-            color: COLORS.textPrimary,
-          }}
-          numberOfLines={1}
-        >
-          {user?.name ?? "—"}
-          {user?.age ? `, ${user.age}` : ""}
-        </Text>
-        {user?.kundli?.nakshatra && (
+        {badge && (
           <View
             style={{
-              alignSelf: "flex-start",
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-              borderRadius: 20,
-              backgroundColor: ganaColor + "20",
+              backgroundColor: ganaColor + "30",
+              borderRadius: RADIUS.md,
+              paddingHorizontal: rp(8),
+              paddingVertical: rp(5),
+              borderWidth: 1,
+              borderColor: ganaColor + "60",
+              alignItems: "center",
             }}
           >
+            <Text style={{ fontSize: rf(16) }}>{badge.emoji}</Text>
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 11,
-                color: ganaColor,
-                letterSpacing: 0.5,
+                fontSize: rf(9),
+                color: user?.photos?.[0] ? "#fff" : ganaColor,
+                marginTop: 2,
               }}
             >
-              ✦ {user.kundli.nakshatra}
+              {badge.label}
             </Text>
           </View>
-        )}
-        {user?.bio && (
-          <Text
-            style={{
-              fontFamily: FONTS.body,
-              fontSize: 12,
-              color: COLORS.textSecondary,
-              lineHeight: 17,
-            }}
-            numberOfLines={2}
-          >
-            {user.bio}
-          </Text>
         )}
       </View>
     </TouchableOpacity>
@@ -522,7 +668,7 @@ function RequestCard({ user, onPress }) {
 }
 
 function PremiumGateHeader({ count, label, onUpgrade }) {
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const { COLORS, FONTS, RADIUS } = useTheme();
   return (
     <TouchableOpacity
       style={{
@@ -533,8 +679,8 @@ function PremiumGateHeader({ count, label, onUpgrade }) {
         borderRadius: RADIUS.lg,
         borderWidth: 1,
         borderColor: COLORS.gold + "40",
-        padding: SPACING.md,
-        marginBottom: SPACING.md,
+        padding: rp(14),
+        marginBottom: rp(12),
       }}
       onPress={onUpgrade}
       activeOpacity={0.85}
@@ -543,16 +689,16 @@ function PremiumGateHeader({ count, label, onUpgrade }) {
         style={{
           flexDirection: "row",
           alignItems: "center",
-          gap: SPACING.sm,
+          gap: rs(10),
           flex: 1,
         }}
       >
-        <Text style={{ fontSize: 20 }}>👑</Text>
+        <Text style={{ fontSize: rf(20) }}>👑</Text>
         <View>
           <Text
             style={{
               fontFamily: FONTS.bodyMedium,
-              fontSize: 13,
+              fontSize: rf(13),
               color: COLORS.textPrimary,
             }}
           >
@@ -561,7 +707,7 @@ function PremiumGateHeader({ count, label, onUpgrade }) {
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 11,
+              fontSize: rf(11),
               color: COLORS.textSecondary,
             }}
           >
@@ -573,12 +719,16 @@ function PremiumGateHeader({ count, label, onUpgrade }) {
         style={{
           backgroundColor: COLORS.gold,
           borderRadius: RADIUS.md,
-          paddingHorizontal: SPACING.md,
-          paddingVertical: 6,
+          paddingHorizontal: rp(12),
+          paddingVertical: rp(6),
         }}
       >
         <Text
-          style={{ fontFamily: FONTS.bodyBold, fontSize: 12, color: COLORS.bg }}
+          style={{
+            fontFamily: FONTS.bodyBold,
+            fontSize: rf(12),
+            color: "#fff",
+          }}
         >
           Upgrade
         </Text>
@@ -590,12 +740,12 @@ function PremiumGateHeader({ count, label, onUpgrade }) {
 function Empty({ icon, title, body }) {
   const { COLORS, FONTS } = useTheme();
   return (
-    <View style={{ alignItems: "center", gap: 10 }}>
-      <Text style={{ fontSize: 44, marginBottom: 6 }}>{icon}</Text>
+    <View style={{ alignItems: "center", gap: rs(10) }}>
+      <Text style={{ fontSize: rf(44), marginBottom: rs(6) }}>{icon}</Text>
       <Text
         style={{
           fontFamily: FONTS.headingBold,
-          fontSize: 18,
+          fontSize: rf(18),
           color: COLORS.textPrimary,
         }}
       >
@@ -604,10 +754,10 @@ function Empty({ icon, title, body }) {
       <Text
         style={{
           fontFamily: FONTS.body,
-          fontSize: 13,
+          fontSize: rf(13),
           color: COLORS.textSecondary,
           textAlign: "center",
-          lineHeight: 20,
+          lineHeight: rf(20),
         }}
       >
         {body}
@@ -623,7 +773,7 @@ const VIEWS_SUBS = ["VIEWED YOU", "YOU VIEWED"];
 export default function MatchesScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
-  const { COLORS, FONTS, SPACING } = useTheme();
+  const { COLORS, FONTS, RADIUS } = useTheme();
   const matches = useSelector(selectMatches);
   const matchesLoading = useSelector(selectMatchesLoading);
 
@@ -639,9 +789,9 @@ export default function MatchesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState("default");
-  const [selectedProfile, setSelectedProfile] = useState(null);
-  const [blockReportTarget, setBlockReportTarget] = useState(null); // { matchId, userId, userName }
-
+  const [selectedProfile, setSelectedProfile] = useState(null); // for CompatibilityModal
+  const [viewingUser, setViewingUser] = useState(null); // for ProfileViewer
+  const [blockReportTarget, setBlockReportTarget] = useState(null);
   const {
     isPremium,
     boostActive,
@@ -722,6 +872,17 @@ export default function MatchesScreen() {
     />
   );
 
+  // When clicking on a viewed/liked user:
+  // - Premium: open full ProfileViewer
+  // - Free: open paywall
+  const handleProfileCardPress = (user, paywallReason) => {
+    if (isPremium) {
+      setViewingUser(user);
+    } else {
+      openPaywall(paywallReason);
+    }
+  };
+
   const renderMessages = () => {
     if (matchesLoading && matches.length === 0 && !refreshing)
       return (
@@ -745,6 +906,8 @@ export default function MatchesScreen() {
                 nakshatra: m.user?.cosmicCard?.nakshatra,
                 gunaScore: m.compatibility?.gunaScore,
                 verdict: m.compatibility?.verdict,
+                // Pass userId so CompatibilityModal can fetch live data
+                userId: m.user?.id,
               })
             }
             onLongPress={(m) =>
@@ -762,13 +925,9 @@ export default function MatchesScreen() {
                 flexGrow: 1,
                 justifyContent: "center",
                 alignItems: "center",
-                padding: 40,
+                padding: rp(40),
               }
-            : {
-                paddingHorizontal: SPACING.xl,
-                paddingBottom: 32,
-                paddingTop: 8,
-              }
+            : { paddingBottom: rp(32) }
         }
         ListEmptyComponent={
           <Empty
@@ -800,50 +959,49 @@ export default function MatchesScreen() {
           >
             <ActivityIndicator size="large" color={COLORS.gold} />
           </View>
-        ) : showLocked ? (
-          <FlatList
-            data={likedMe}
-            keyExtractor={(u) => String(u._id)}
-            ListHeaderComponent={
-              <PremiumGateHeader
-                count={likedMe.length}
-                label={`person${likedMe.length !== 1 ? "s" : ""} liked you`}
-                onUpgrade={() => openPaywall("liked_you")}
-              />
-            }
-            renderItem={({ item }) => (
-              <LockedCard
-                user={item}
-                onUnlock={() => openPaywall("liked_you")}
-              />
-            )}
-            contentContainerStyle={{
-              paddingHorizontal: SPACING.xl,
-              paddingBottom: 32,
-              paddingTop: 8,
-            }}
-            refreshControl={renderRefresh}
-            showsVerticalScrollIndicator={false}
-          />
         ) : (
           <FlatList
             data={listData}
             keyExtractor={(u) => String(u._id)}
-            renderItem={({ item }) => (
-              <RequestCard user={item} onPress={setSelectedProfile} />
-            )}
+            ListHeaderComponent={
+              showLocked ? (
+                <PremiumGateHeader
+                  count={likedMe.length}
+                  label={`person${likedMe.length !== 1 ? "s" : ""} liked you`}
+                  onUpgrade={() => openPaywall("liked_you")}
+                />
+              ) : null
+            }
+            renderItem={({ item }) =>
+              showLocked ? (
+                <LockedCard
+                  user={item}
+                  onUnlock={() => openPaywall("liked_you")}
+                />
+              ) : (
+                <RevealedCard
+                  user={item}
+                  onPress={(u) => handleProfileCardPress(u, "liked_you")}
+                  badge={
+                    isReceived
+                      ? { emoji: "❤️", label: "Liked you" }
+                      : { emoji: "✦", label: "You liked" }
+                  }
+                />
+              )
+            }
             contentContainerStyle={
               listData.length === 0
                 ? {
                     flexGrow: 1,
                     justifyContent: "center",
                     alignItems: "center",
-                    padding: 40,
+                    padding: rp(40),
                   }
                 : {
-                    paddingHorizontal: SPACING.xl,
-                    paddingBottom: 32,
-                    paddingTop: 8,
+                    paddingHorizontal: rp(20),
+                    paddingBottom: rp(32),
+                    paddingTop: rp(4),
                   }
             }
             ListEmptyComponent={
@@ -886,52 +1044,51 @@ export default function MatchesScreen() {
           >
             <ActivityIndicator size="large" color={COLORS.gold} />
           </View>
-        ) : showLocked ? (
-          <FlatList
-            data={viewedMe}
-            keyExtractor={(u) => String(u._id)}
-            ListHeaderComponent={
-              <PremiumGateHeader
-                count={viewedMe.length}
-                label={`person${
-                  viewedMe.length !== 1 ? "s" : ""
-                } viewed your profile`}
-                onUpgrade={() => openPaywall("profile_views")}
-              />
-            }
-            renderItem={({ item }) => (
-              <LockedCard
-                user={item}
-                onUnlock={() => openPaywall("profile_views")}
-              />
-            )}
-            contentContainerStyle={{
-              paddingHorizontal: SPACING.xl,
-              paddingBottom: 32,
-              paddingTop: 8,
-            }}
-            refreshControl={renderRefresh}
-            showsVerticalScrollIndicator={false}
-          />
         ) : (
           <FlatList
             data={listData}
             keyExtractor={(u) => String(u._id)}
-            renderItem={({ item }) => (
-              <RequestCard user={item} onPress={setSelectedProfile} />
-            )}
+            ListHeaderComponent={
+              showLocked ? (
+                <PremiumGateHeader
+                  count={viewedMe.length}
+                  label={`person${
+                    viewedMe.length !== 1 ? "s" : ""
+                  } viewed your profile`}
+                  onUpgrade={() => openPaywall("profile_views")}
+                />
+              ) : null
+            }
+            renderItem={({ item }) =>
+              showLocked ? (
+                <LockedCard
+                  user={item}
+                  onUnlock={() => openPaywall("profile_views")}
+                />
+              ) : (
+                <RevealedCard
+                  user={item}
+                  onPress={(u) => handleProfileCardPress(u, "profile_views")}
+                  badge={
+                    isViewedYou
+                      ? { emoji: "👁", label: "Viewed you" }
+                      : { emoji: "🔍", label: "You viewed" }
+                  }
+                />
+              )
+            }
             contentContainerStyle={
               listData.length === 0
                 ? {
                     flexGrow: 1,
                     justifyContent: "center",
                     alignItems: "center",
-                    padding: 40,
+                    padding: rp(40),
                   }
                 : {
-                    paddingHorizontal: SPACING.xl,
-                    paddingBottom: 32,
-                    paddingTop: 8,
+                    paddingHorizontal: rp(20),
+                    paddingBottom: rp(32),
+                    paddingTop: rp(4),
                   }
             }
             ListEmptyComponent={
@@ -958,53 +1115,80 @@ export default function MatchesScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      {/* Header */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingHorizontal: SPACING.xl,
-          paddingTop: 52,
-          paddingBottom: 4,
-        }}
-      >
-        <Text
-          style={{
-            fontFamily: FONTS.headingBold,
-            fontSize: 16,
-            color: COLORS.gold,
-            letterSpacing: 4,
-          }}
-        >
-          MATCHES
-        </Text>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: SPACING.sm,
-          }}
-        >
-          <TouchableOpacity
-            onPress={() => {
-              if (topTab === 0) loadMatches();
-              else if (topTab === 1) loadRequests();
-              else loadViews();
-            }}
-            style={{ padding: 8, marginRight: 4 }}
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <BrandHeader
+        title="MATCHES"
+        right={
+          <View
+            style={{ flexDirection: "row", alignItems: "center", gap: rs(8) }}
           >
-            <Text style={{ fontSize: 18 }}>🔄</Text>
-          </TouchableOpacity>
-          {isPremium ? (
-            <>
-              <View
+            <TouchableOpacity
+              onPress={() => {
+                if (topTab === 0) loadMatches();
+                else if (topTab === 1) loadRequests();
+                else loadViews();
+              }}
+              style={{ padding: rp(6) }}
+            >
+              <Text style={{ fontSize: rf(18) }}>🔄</Text>
+            </TouchableOpacity>
+            {isPremium ? (
+              <>
+                <View
+                  style={{
+                    backgroundColor: COLORS.gold + "25",
+                    borderRadius: 999,
+                    paddingHorizontal: rp(8),
+                    paddingVertical: rp(3),
+                    borderWidth: 1,
+                    borderColor: COLORS.gold + "40",
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: rf(11),
+                      color: COLORS.gold,
+                    }}
+                  >
+                    ✨ Premium
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: boostActive
+                      ? COLORS.gold + "20"
+                      : COLORS.bgElevated,
+                    borderRadius: rs(8),
+                    paddingHorizontal: rp(8),
+                    paddingVertical: rp(4),
+                    borderWidth: 1,
+                    borderColor: boostActive ? COLORS.gold : COLORS.border,
+                  }}
+                  onPress={async () => {
+                    const r = await activateBoost();
+                    if (r?.success) dispatch(fetchProfiles());
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: rf(11),
+                      color: COLORS.textPrimary,
+                    }}
+                  >
+                    {boostActive ? "🚀 On" : "🚀 Boost"}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                onPress={() => openPaywall("default")}
                 style={{
-                  backgroundColor: COLORS.gold + "25",
-                  borderRadius: 999,
-                  paddingHorizontal: 8,
-                  paddingVertical: 3,
+                  backgroundColor: COLORS.gold + "15",
+                  borderRadius: RADIUS.full,
+                  paddingHorizontal: rp(10),
+                  paddingVertical: rp(4),
                   borderWidth: 1,
                   borderColor: COLORS.gold + "40",
                 }}
@@ -1012,55 +1196,17 @@ export default function MatchesScreen() {
                 <Text
                   style={{
                     fontFamily: FONTS.bodyMedium,
-                    fontSize: 11,
+                    fontSize: rf(11),
                     color: COLORS.gold,
                   }}
                 >
-                  ✨ Premium
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={{
-                  backgroundColor: boostActive
-                    ? COLORS.gold + "20"
-                    : COLORS.bgElevated,
-                  borderRadius: SPACING.sm,
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
-                  borderWidth: 1,
-                  borderColor: boostActive ? COLORS.gold : COLORS.border,
-                }}
-                onPress={async () => {
-                  const r = await activateBoost();
-                  if (r?.success) dispatch(fetchProfiles());
-                }}
-              >
-                <Text
-                  style={{
-                    fontFamily: FONTS.bodyMedium,
-                    fontSize: 12,
-                    color: COLORS.textPrimary,
-                  }}
-                >
-                  {boostActive ? "🚀 Boosting" : "🚀 Boost"}
+                  ✨ Upgrade
                 </Text>
               </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity onPress={() => openPaywall("default")}>
-              <Text
-                style={{
-                  fontFamily: FONTS.bodyMedium,
-                  fontSize: 12,
-                  color: COLORS.gold,
-                }}
-              >
-                ✨ Upgrade
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+            )}
+          </View>
+        }
+      />
 
       <TopTabBar tabs={TOP_TABS} active={topTab} onSelect={setTopTab} />
       <View style={{ flex: 1 }}>
@@ -1074,11 +1220,26 @@ export default function MatchesScreen() {
         onClose={closePaywall}
         triggerReason={paywallReason}
       />
+
+      {/* CompatibilityModal — now passes userId so it can fetch live data including for already-matched */}
       <CompatibilityModal
         visible={!!selectedProfile}
         profile={selectedProfile}
         onClose={() => setSelectedProfile(null)}
       />
+
+      {/* Full profile viewer for premium users */}
+      <ProfileViewer
+        visible={!!viewingUser}
+        user={viewingUser}
+        onClose={() => setViewingUser(null)}
+        onLiked={() => {
+          setViewingUser(null);
+          loadRequests(true);
+          loadViews(true);
+        }}
+      />
+
       {blockReportTarget && (
         <BlockReportModal
           visible={!!blockReportTarget}
@@ -1092,6 +1253,6 @@ export default function MatchesScreen() {
           }}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }

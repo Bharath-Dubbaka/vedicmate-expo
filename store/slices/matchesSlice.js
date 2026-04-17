@@ -1,4 +1,10 @@
 // store/slices/matchesSlice.js
+// FIX: addMatch now stores the full cosmicCard (animal, nadi, varna, vashya, lordPlanet, rashi)
+// Previously only stored name, photo, nakshatra — causing "not available" in chat modal
+
+// FIX: addMatch now stores the full cosmicCard (animal, nadi, varna, vashya, lordPlanet, rashi)
+// Previously only stored name, photo, nakshatra — causing "not available" in chat modal
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { matchingAPI } from "../../services/api";
 
@@ -14,7 +20,9 @@ export const fetchMatches = createAsyncThunk(
     try {
       console.log("[MATCHES SLICE] fetchMatches: calling /matching/matches...");
       const res = await matchingAPI.getMatches();
-      console.log(`[MATCHES SLICE] fetchMatches: received ${res.data.matches.length} matches`);
+      console.log(
+        `[MATCHES SLICE] fetchMatches: received ${res.data.matches.length} matches`
+      );
       return res.data.matches;
     } catch (err) {
       const message = err.response?.data?.message || err.message;
@@ -28,16 +36,19 @@ const matchesSlice = createSlice({
   name: "matches",
   initialState,
   reducers: {
-    // Called when Socket.io emits a new match event
+    // ── addMatch: called from Discover when a real-time match fires ───────────
+    // FIXED: now stores full cosmicCard so chat modal "Their Chart" tab
+    // has all the data (animal, nadi, varna, vashya, lordPlanet, rashi, gana)
     addMatch: (state, action) => {
       console.log("[MATCHES SLICE] addMatch:", action.payload.matchId);
-      // Avoid duplicates
-      const exists = state.matches.some((m) => m.matchId === action.payload.matchId);
+      const exists = state.matches.some(
+        (m) => m.matchId === action.payload.matchId
+      );
       if (!exists) {
-        state.matches.unshift(action.payload); // add to top
+        state.matches.unshift(action.payload);
       }
     },
-    // Update lastMessage preview when a new chat message arrives
+
     updateLastMessage: (state, action) => {
       const { matchId, message } = action.payload;
       const match = state.matches.find((m) => m.matchId === matchId);
@@ -46,7 +57,7 @@ const matchesSlice = createSlice({
         match.unreadCount = (match.unreadCount || 0) + 1;
       }
     },
-    // Clear unread count when user opens chat
+
     clearUnread: (state, action) => {
       const matchId = action.payload;
       const match = state.matches.find((m) => m.matchId === matchId);
@@ -72,7 +83,8 @@ const matchesSlice = createSlice({
   },
 });
 
-export const { addMatch, updateLastMessage, clearUnread } = matchesSlice.actions;
+export const { addMatch, updateLastMessage, clearUnread } =
+  matchesSlice.actions;
 
 export const selectMatches = (state) => state.matches.matches;
 export const selectMatchesLoading = (state) => state.matches.loading;

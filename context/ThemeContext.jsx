@@ -10,39 +10,80 @@
 // When you call toggleTheme(), all components re-render with the new palette.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DARK_COLORS, LIGHT_COLORS, FONTS, SPACING, RADIUS, SHADOWS, GANA_CONFIG, VERDICT_CONFIG } from '../constants/theme';
+//NEW
+// ─────────────────────────────────────────────────────────────────────────────
+// isDark = true  → NIGHT MODE  (warm parchment — the good one)
+// isDark = false → LIGHT MODE  (new bright palette)
+//
+// lightVariant: 'saffron' | 'pastel' — user can switch between the two
+// ─────────────────────────────────────────────────────────────────────────────
 
-const THEME_KEY = 'vedicfind_theme';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  NIGHT_COLORS,
+  LIGHT_SAFFRON,
+  LIGHT_PASTEL,
+  FONTS,
+  SPACING,
+  RADIUS,
+  SHADOWS,
+  GANA_CONFIG,
+  VERDICT_CONFIG,
+} from "../constants/theme";
+
+const THEME_KEY = "vedicfind_theme_v4";
+const VARIANT_KEY = "vedicfind_light_variant";
 
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
-  const [isDark, setIsDark] = useState(true); // default dark
+  const [isDark, setIsDark] = useState(true); // true = Night mode (parchment)
+  const [lightVariant, setLightVariant] = useState("saffron"); // 'saffron' | 'pastel'
 
   // Load saved preference on mount
   useEffect(() => {
-    AsyncStorage.getItem(THEME_KEY)
-      .then(val => {
-        if (val !== null) setIsDark(val === 'dark');
+    Promise.all([
+      AsyncStorage.getItem(THEME_KEY),
+      AsyncStorage.getItem(VARIANT_KEY),
+    ])
+      .then(([themeVal, variantVal]) => {
+        if (themeVal !== null) setIsDark(themeVal === "night");
+        if (variantVal !== null) setLightVariant(variantVal);
       })
       .catch(() => {});
   }, []);
 
   const toggleTheme = useCallback(async () => {
-    setIsDark(prev => {
+    setIsDark((prev) => {
       const next = !prev;
-      AsyncStorage.setItem(THEME_KEY, next ? 'dark' : 'light').catch(() => {});
+      AsyncStorage.setItem(THEME_KEY, next ? "night" : "light").catch(() => {});
       return next;
     });
   }, []);
 
-  const COLORS = isDark ? DARK_COLORS : LIGHT_COLORS;
+  const switchLightVariant = useCallback(async (variant) => {
+    setLightVariant(variant);
+    AsyncStorage.setItem(VARIANT_KEY, variant).catch(() => {});
+  }, []);
+
+  const COLORS = isDark
+    ? NIGHT_COLORS
+    : lightVariant === "pastel"
+    ? LIGHT_PASTEL
+    : LIGHT_SAFFRON;
 
   const value = {
     isDark,
+    lightVariant,
     toggleTheme,
+    switchLightVariant,
     COLORS,
     FONTS,
     SPACING,
@@ -53,14 +94,12 @@ export function ThemeProvider({ children }) {
   };
 
   return (
-    <ThemeContext.Provider value={value}>
-      {children}
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   );
 }
 
 export function useTheme() {
   const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error('useTheme must be used inside ThemeProvider');
+  if (!ctx) throw new Error("useTheme must be used inside ThemeProvider");
   return ctx;
 }

@@ -9,6 +9,11 @@
 //   - Keyboard handling: KeyboardAvoidingView pushes content up
 //   - No CSS :focus — use onFocus/onBlur props on TextInput
 // ─────────────────────────────────────────────────────────────────────────────
+// Profile modal: Tab 1 = compatibility card (m1 vs f1)
+//                Tab 2 = userf1's own Koota chart (her personal attributes)
+// Profile modal: clickable photo full view
+// Their Chart tab: full cosmic identity (animal, nadi, varna, vashya, lord) from cosmicCard
+// All fields now populated — no more "not available"
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -22,6 +27,8 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  Image,
+  Dimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useDispatch, useSelector } from "react-redux";
@@ -41,12 +48,926 @@ import {
 } from "../../../services/socket";
 import { useTheme } from "../../../context/ThemeContext";
 import BlockReportModal from "../../../components/BlockReportModal";
+import { matchingAPI } from "../../../services/api";
+import { rf, rs, rp } from "../../../constants/responsive";
 
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+
+const KOOTA_LIST = [
+  {
+    key: "nadi",
+    name: "Nadi",
+    emoji: "🌊",
+    max: 8,
+    desc: "Health & body constitution",
+  },
+  {
+    key: "bhakoot",
+    name: "Bhakoot",
+    emoji: "🌕",
+    max: 7,
+    desc: "Emotional compatibility",
+  },
+  { key: "gana", name: "Gana", emoji: "✨", max: 6, desc: "Temperament match" },
+  {
+    key: "grahaMaitri",
+    name: "Graha Maitri",
+    emoji: "🪐",
+    max: 5,
+    desc: "Mental compatibility",
+  },
+  {
+    key: "yoni",
+    name: "Yoni",
+    emoji: "🐾",
+    max: 4,
+    desc: "Physical compatibility",
+  },
+  {
+    key: "tara",
+    name: "Tara",
+    emoji: "⭐",
+    max: 3,
+    desc: "Birth star harmony",
+  },
+  {
+    key: "vashya",
+    name: "Vashya",
+    emoji: "💫",
+    max: 2,
+    desc: "Mutual attraction",
+  },
+  {
+    key: "varna",
+    name: "Varna",
+    emoji: "📿",
+    max: 1,
+    desc: "Spiritual alignment",
+  },
+];
+
+// ── Full screen photo viewer ──────────────────────────────────────────────────
+function PhotoViewer({ visible, photoUri, onClose }) {
+  const { COLORS } = useTheme();
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.95)",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <TouchableOpacity
+          style={{
+            position: "absolute",
+            top: rs(56),
+            right: rp(20),
+            zIndex: 10,
+            padding: rp(12),
+          }}
+          onPress={onClose}
+        >
+          <Text style={{ fontSize: rf(24), color: "#fff" }}>✕</Text>
+        </TouchableOpacity>
+        {photoUri ? (
+          <Image
+            source={{ uri: photoUri }}
+            style={{ width: SCREEN_W, height: SCREEN_H * 0.8 }}
+            resizeMode="contain"
+          />
+        ) : (
+          <Text style={{ fontSize: rf(64), opacity: 0.3 }}>👤</Text>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+// ── Profile + Compat modal ────────────────────────────────────────────────────
+function ProfileModal({ visible, matchInfo, onClose }) {
+  const { COLORS, FONTS, RADIUS, VERDICT_CONFIG, GANA_CONFIG } = useTheme();
+  const [activeTab, setActiveTab] = useState("compat");
+  const [compatData, setCompatData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [showPhoto, setShowPhoto] = useState(false);
+
+  useEffect(() => {
+    if (visible && matchInfo?.userId && !compatData) {
+      setLoading(true);
+      matchingAPI
+        .getCompatibility(matchInfo.userId)
+        .then((res) => {
+          if (res.data?.compatibility) setCompatData(res.data.compatibility);
+        })
+        .catch((err) => console.warn("[CHAT] Compat fetch:", err.message))
+        .finally(() => setLoading(false));
+    }
+  }, [visible, matchInfo?.userId]);
+
+  const handleClose = () => {
+    setActiveTab("compat");
+    onClose?.();
+  };
+
+  const vc = compatData
+    ? VERDICT_CONFIG[compatData.verdict] || VERDICT_CONFIG["Average Match"]
+    : null;
+  const pct = compatData ? Math.round((compatData.totalScore / 36) * 100) : 0;
+
+  // Build their cosmic attributes from cosmicCard stored in matchInfo
+  const cosmicCard = matchInfo?.cosmicCard || {};
+  const gc = cosmicCard.gana
+    ? GANA_CONFIG[cosmicCard.gana] || GANA_CONFIG.Manushya
+    : null;
+
+  const theirAttributes = [
+    {
+      emoji: "🌟",
+      label: "Nakshatra",
+      value: cosmicCard.nakshatra || matchInfo?.nakshatra || "—",
+    },
+    { emoji: "🌙", label: "Moon Sign", value: cosmicCard.rashi || "—" },
+    {
+      emoji: "🔢",
+      label: "Pada",
+      value: cosmicCard.pada ? `Pada ${cosmicCard.pada}` : "—",
+    },
+    { emoji: "✨", label: "Gana", value: cosmicCard.gana || "—" },
+    { emoji: "🐾", label: "Yoni Animal", value: cosmicCard.animal || "—" },
+    { emoji: "🌊", label: "Nadi", value: cosmicCard.nadi || "—" },
+    { emoji: "📿", label: "Varna", value: cosmicCard.varna || "—" },
+    { emoji: "💫", label: "Vashya", value: cosmicCard.vashya || "—" },
+    { emoji: "🪐", label: "Lord Planet", value: cosmicCard.lordPlanet || "—" },
+  ];
+
+  const hasAnyData = theirAttributes.some((a) => a.value !== "—");
+
+  return (
+    <>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleClose}
+      >
+        <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+          {/* Header */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: rp(20),
+              paddingTop: rs(56),
+              paddingBottom: rp(16),
+              borderBottomWidth: 1,
+              borderBottomColor: COLORS.border,
+            }}
+          >
+            <TouchableOpacity onPress={handleClose} style={{ padding: rp(8) }}>
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyBold,
+                  fontSize: rf(22),
+                  color: COLORS.textPrimary,
+                }}
+              >
+                ←
+              </Text>
+            </TouchableOpacity>
+
+            {/* Clickable avatar */}
+            <TouchableOpacity
+              onPress={() => setShowPhoto(true)}
+              style={{ marginHorizontal: rs(10) }}
+              activeOpacity={0.85}
+            >
+              <View
+                style={{
+                  width: rs(44),
+                  height: rs(44),
+                  borderRadius: rs(22),
+                  borderWidth: 2,
+                  borderColor: gc?.color || COLORS.gold,
+                  overflow: "hidden",
+                  backgroundColor: COLORS.bgElevated,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {matchInfo?.photo ? (
+                  <Image
+                    source={{ uri: matchInfo.photo }}
+                    style={{ width: "100%", height: "100%" }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Text
+                    style={{
+                      fontFamily: FONTS.headingBold,
+                      fontSize: rf(18),
+                      color: COLORS.gold,
+                    }}
+                  >
+                    {matchInfo?.name?.[0]?.toUpperCase() ?? "?"}
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
+
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyBold,
+                  fontSize: rf(17),
+                  color: COLORS.textPrimary,
+                }}
+              >
+                {matchInfo?.name || "Profile"}
+              </Text>
+              {cosmicCard.nakshatra || matchInfo?.nakshatra ? (
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: rf(12),
+                    color: COLORS.gold,
+                  }}
+                >
+                  ✦ {cosmicCard.nakshatra || matchInfo?.nakshatra}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+
+          {/* Tabs */}
+          <View
+            style={{
+              flexDirection: "row",
+              borderBottomWidth: 1,
+              borderBottomColor: COLORS.border,
+            }}
+          >
+            {[
+              { key: "compat", label: "❤️ Compatibility" },
+              { key: "koota", label: "🔯 Their Chart" },
+            ].map((tab) => (
+              <TouchableOpacity
+                key={tab.key}
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  paddingVertical: rp(12),
+                  position: "relative",
+                }}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyMedium,
+                    fontSize: rf(13),
+                    color:
+                      activeTab === tab.key
+                        ? COLORS.gold
+                        : COLORS.textSecondary,
+                  }}
+                >
+                  {tab.label}
+                </Text>
+                {activeTab === tab.key && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      bottom: 0,
+                      left: "15%",
+                      right: "15%",
+                      height: rs(2),
+                      backgroundColor: COLORS.gold,
+                      borderRadius: 1,
+                    }}
+                  />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {loading ? (
+            <View
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <ActivityIndicator color={COLORS.gold} size="large" />
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: rf(14),
+                  color: COLORS.textSecondary,
+                  marginTop: rs(12),
+                }}
+              >
+                Computing compatibility...
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={{ padding: rp(20) }}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* ── TAB 1: COMPATIBILITY ──────────────────────────────────── */}
+              {activeTab === "compat" && (
+                <>
+                  <View
+                    style={{
+                      backgroundColor: COLORS.bgElevated,
+                      borderRadius: RADIUS.md,
+                      padding: rp(12),
+                      marginBottom: rp(16),
+                      borderWidth: 1,
+                      borderColor: COLORS.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: FONTS.body,
+                        fontSize: rf(12),
+                        color: COLORS.textSecondary,
+                        lineHeight: rf(18),
+                      }}
+                    >
+                      This is the{" "}
+                      <Text
+                        style={{
+                          fontFamily: FONTS.bodyBold,
+                          color: COLORS.textPrimary,
+                        }}
+                      >
+                        pairwise compatibility
+                      </Text>{" "}
+                      between you and {matchInfo?.name}. Each of 8 Kootas
+                      compares your cosmic attributes against theirs using Ashta
+                      Koota rules.
+                    </Text>
+                  </View>
+
+                  {compatData && vc ? (
+                    <>
+                      <View
+                        style={{ alignItems: "center", marginBottom: rp(20) }}
+                      >
+                        <View
+                          style={{
+                            width: rs(90),
+                            height: rs(90),
+                            borderRadius: rs(45),
+                            borderWidth: 2.5,
+                            borderColor: vc.color,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            backgroundColor: vc.color + "15",
+                            marginBottom: rp(12),
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: FONTS.headingBold,
+                              fontSize: rf(24),
+                              color: vc.color,
+                            }}
+                          >
+                            {pct}%
+                          </Text>
+                          <Text
+                            style={{
+                              fontFamily: FONTS.body,
+                              fontSize: rf(10),
+                              color: COLORS.textSecondary,
+                            }}
+                          >
+                            compatible
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            fontFamily: FONTS.headingBold,
+                            fontSize: rf(20),
+                            color: COLORS.textPrimary,
+                            marginBottom: rp(4),
+                          }}
+                        >
+                          {vc.emoji} {compatData.verdict}
+                        </Text>
+                        <Text
+                          style={{
+                            fontFamily: FONTS.body,
+                            fontSize: rf(14),
+                            color: COLORS.textSecondary,
+                          }}
+                        >
+                          {compatData.totalScore}/36 Gunas
+                        </Text>
+                      </View>
+
+                      <View
+                        style={{
+                          height: rs(5),
+                          backgroundColor: COLORS.border,
+                          borderRadius: 3,
+                          overflow: "hidden",
+                          marginBottom: rp(20),
+                        }}
+                      >
+                        <View
+                          style={{
+                            height: rs(5),
+                            width: `${pct}%`,
+                            backgroundColor: vc.color,
+                            borderRadius: 3,
+                          }}
+                        />
+                      </View>
+
+                      <Text
+                        style={{
+                          fontFamily: FONTS.body,
+                          fontSize: rf(10),
+                          color: COLORS.textDim,
+                          letterSpacing: 2,
+                          marginBottom: rp(10),
+                        }}
+                      >
+                        ASHTA KOOTA BREAKDOWN
+                      </Text>
+                      <View
+                        style={{
+                          backgroundColor: COLORS.bgCard,
+                          borderRadius: RADIUS.xl,
+                          borderWidth: 1,
+                          borderColor: COLORS.border,
+                          overflow: "hidden",
+                          marginBottom: rp(20),
+                        }}
+                      >
+                        {KOOTA_LIST.map((k, idx) => {
+                          const entry = compatData.breakdown?.[k.key];
+                          const score = entry?.score ?? 0;
+                          const maxVal = entry?.max ?? k.max;
+                          const detail = entry?.detail ?? "";
+                          const isPerfect = score === maxVal;
+                          const isZero = score === 0;
+                          const barColor = isPerfect
+                            ? COLORS.gold
+                            : isZero
+                            ? COLORS.rose
+                            : vc.color;
+                          return (
+                            <View
+                              key={k.key}
+                              style={{
+                                paddingHorizontal: rp(16),
+                                paddingVertical: rp(12),
+                                borderBottomWidth:
+                                  idx < KOOTA_LIST.length - 1 ? 1 : 0,
+                                borderBottomColor: COLORS.border,
+                              }}
+                            >
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: rs(10),
+                                  marginBottom: rp(6),
+                                }}
+                              >
+                                <Text
+                                  style={{ fontSize: rf(18), width: rs(24) }}
+                                >
+                                  {k.emoji}
+                                </Text>
+                                <View style={{ flex: 1 }}>
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      justifyContent: "space-between",
+                                    }}
+                                  >
+                                    <View>
+                                      <Text
+                                        style={{
+                                          fontFamily: FONTS.bodyMedium,
+                                          fontSize: rf(14),
+                                          color: COLORS.textPrimary,
+                                        }}
+                                      >
+                                        {k.name}
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          fontFamily: FONTS.body,
+                                          fontSize: rf(11),
+                                          color: COLORS.textDim,
+                                        }}
+                                      >
+                                        {k.desc}
+                                      </Text>
+                                    </View>
+                                    <Text
+                                      style={{
+                                        fontFamily: FONTS.bodyBold,
+                                        fontSize: rf(14),
+                                        color: isPerfect
+                                          ? COLORS.gold
+                                          : isZero
+                                          ? COLORS.rose
+                                          : COLORS.textSecondary,
+                                      }}
+                                    >
+                                      {score}/{maxVal}
+                                      {isPerfect ? " ✓" : isZero ? " ✕" : ""}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+                              <View
+                                style={{
+                                  height: rs(4),
+                                  backgroundColor: COLORS.border,
+                                  borderRadius: 2,
+                                  overflow: "hidden",
+                                  marginLeft: rs(34),
+                                }}
+                              >
+                                <View
+                                  style={{
+                                    height: rs(4),
+                                    width: `${(score / maxVal) * 100}%`,
+                                    backgroundColor: barColor,
+                                    borderRadius: 2,
+                                  }}
+                                />
+                              </View>
+                              {detail ? (
+                                <Text
+                                  style={{
+                                    fontFamily: FONTS.body,
+                                    fontSize: rf(11),
+                                    color: COLORS.textSecondary,
+                                    marginTop: rp(4),
+                                    marginLeft: rs(34),
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  {detail}
+                                </Text>
+                              ) : null}
+                            </View>
+                          );
+                        })}
+                      </View>
+
+                      {compatData.doshas?.length > 0 && (
+                        <>
+                          <Text
+                            style={{
+                              fontFamily: FONTS.body,
+                              fontSize: rf(10),
+                              color: COLORS.textDim,
+                              letterSpacing: 2,
+                              marginBottom: rp(10),
+                            }}
+                          >
+                            DOSHAS
+                          </Text>
+                          <View
+                            style={{
+                              backgroundColor: COLORS.bgCard,
+                              borderRadius: RADIUS.xl,
+                              borderWidth: 1,
+                              borderColor: "#FF980040",
+                              overflow: "hidden",
+                              marginBottom: rp(20),
+                            }}
+                          >
+                            {compatData.doshas.map((d, i) => (
+                              <View
+                                key={i}
+                                style={{
+                                  flexDirection: "row",
+                                  gap: rs(10),
+                                  padding: rp(14),
+                                  borderBottomWidth:
+                                    i < compatData.doshas.length - 1 ? 1 : 0,
+                                  borderBottomColor: COLORS.border,
+                                }}
+                              >
+                                <Text style={{ fontSize: rf(18) }}>
+                                  {d.severity === "high" ? "⚠️" : "ℹ️"}
+                                </Text>
+                                <View style={{ flex: 1 }}>
+                                  <Text
+                                    style={{
+                                      fontFamily: FONTS.bodyMedium,
+                                      fontSize: rf(14),
+                                      color: COLORS.textPrimary,
+                                      marginBottom: rp(2),
+                                    }}
+                                  >
+                                    {d.name}
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      fontFamily: FONTS.body,
+                                      fontSize: rf(12),
+                                      color: COLORS.textSecondary,
+                                      lineHeight: rf(18),
+                                    }}
+                                  >
+                                    {d.description}
+                                  </Text>
+                                  {d.cancellation && (
+                                    <Text
+                                      style={{
+                                        fontFamily: FONTS.body,
+                                        fontSize: rf(11),
+                                        color: COLORS.good || "#4ADE80",
+                                        marginTop: rp(4),
+                                      }}
+                                    >
+                                      ✓ {d.cancellation}
+                                    </Text>
+                                  )}
+                                </View>
+                              </View>
+                            ))}
+                          </View>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <View style={{ alignItems: "center", padding: rp(40) }}>
+                      <Text style={{ fontSize: rf(40), marginBottom: rs(12) }}>
+                        ❤️
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: FONTS.body,
+                          fontSize: rf(14),
+                          color: COLORS.textSecondary,
+                          textAlign: "center",
+                        }}
+                      >
+                        Compatibility data not available
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* ── TAB 2: THEIR CHART ────────────────────────────────────── */}
+              {activeTab === "koota" && (
+                <>
+                  <View
+                    style={{
+                      backgroundColor: COLORS.bgElevated,
+                      borderRadius: RADIUS.md,
+                      padding: rp(12),
+                      marginBottom: rp(16),
+                      borderWidth: 1,
+                      borderColor: COLORS.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: FONTS.body,
+                        fontSize: rf(12),
+                        color: COLORS.textSecondary,
+                        lineHeight: rf(18),
+                      }}
+                    >
+                      These are{" "}
+                      <Text
+                        style={{
+                          fontFamily: FONTS.bodyBold,
+                          color: COLORS.textPrimary,
+                        }}
+                      >
+                        {matchInfo?.name}'s personal cosmic attributes
+                      </Text>{" "}
+                      — their fixed cosmic fingerprint derived from their birth
+                      Nakshatra. These were used to calculate compatibility in
+                      Tab 1.
+                    </Text>
+                  </View>
+
+                  {/* Clickable photo */}
+                  {matchInfo?.photo && (
+                    <TouchableOpacity
+                      onPress={() => setShowPhoto(true)}
+                      activeOpacity={0.9}
+                      style={{
+                        borderRadius: RADIUS.xl,
+                        overflow: "hidden",
+                        marginBottom: rp(16),
+                        height: rs(200),
+                      }}
+                    >
+                      <Image
+                        source={{ uri: matchInfo.photo }}
+                        style={{ width: "100%", height: "100%" }}
+                        resizeMode="cover"
+                      />
+                      <View
+                        style={{
+                          position: "absolute",
+                          bottom: rp(10),
+                          right: rp(10),
+                          backgroundColor: "rgba(0,0,0,0.6)",
+                          borderRadius: RADIUS.md,
+                          paddingHorizontal: rp(10),
+                          paddingVertical: rp(5),
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: FONTS.body,
+                            fontSize: rf(11),
+                            color: "#fff",
+                          }}
+                        >
+                          Tap to expand 🔍
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Gana hero */}
+                  {gc && (
+                    <View
+                      style={{
+                        backgroundColor: gc.bg,
+                        borderRadius: RADIUS.xl,
+                        padding: rp(16),
+                        marginBottom: rp(16),
+                        borderWidth: 1,
+                        borderColor: gc.color + "40",
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: rs(12),
+                        }}
+                      >
+                        <Text style={{ fontSize: rf(32) }}>{gc.emoji}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              fontFamily: FONTS.headingBold,
+                              fontSize: rf(20),
+                              color: COLORS.textPrimary,
+                            }}
+                          >
+                            {cosmicCard.gana} Gana
+                          </Text>
+                          <Text
+                            style={{
+                              fontFamily: FONTS.body,
+                              fontSize: rf(13),
+                              color: gc.color,
+                            }}
+                          >
+                            {gc.title}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* All attributes */}
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: rf(10),
+                      color: COLORS.textDim,
+                      letterSpacing: 3,
+                      marginBottom: rp(10),
+                    }}
+                  >
+                    COSMIC ATTRIBUTES
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: COLORS.bgCard,
+                      borderRadius: RADIUS.xl,
+                      borderWidth: 1,
+                      borderColor: COLORS.border,
+                      overflow: "hidden",
+                      marginBottom: rp(20),
+                    }}
+                  >
+                    {theirAttributes.map((attr, idx) => {
+                      const hasValue = attr.value !== "—";
+                      return (
+                        <View
+                          key={attr.label}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            paddingHorizontal: rp(16),
+                            paddingVertical: rp(12),
+                            borderBottomWidth:
+                              idx < theirAttributes.length - 1 ? 1 : 0,
+                            borderBottomColor: COLORS.border,
+                          }}
+                        >
+                          <Text style={{ fontSize: rf(18), width: rs(28) }}>
+                            {attr.emoji}
+                          </Text>
+                          <Text
+                            style={{
+                              fontFamily: FONTS.body,
+                              fontSize: rf(13),
+                              color: COLORS.textSecondary,
+                              flex: 1,
+                            }}
+                          >
+                            {attr.label}
+                          </Text>
+                          <Text
+                            style={{
+                              fontFamily: FONTS.bodyBold,
+                              fontSize: rf(14),
+                              color: hasValue
+                                ? COLORS.textPrimary
+                                : COLORS.textDim,
+                            }}
+                          >
+                            {attr.value}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  {!hasAnyData && (
+                    <View
+                      style={{
+                        backgroundColor: COLORS.bgElevated,
+                        borderRadius: RADIUS.md,
+                        padding: rp(14),
+                        borderWidth: 1,
+                        borderColor: COLORS.border,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: FONTS.body,
+                          fontSize: rf(12),
+                          color: COLORS.textSecondary,
+                          lineHeight: rf(18),
+                          textAlign: "center",
+                        }}
+                      >
+                        💡 This match was made before the full data was stored.
+                        The compatibility calculation in Tab 1 was correctly
+                        computed at matching time. New matches will show all
+                        attributes here.
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+
+              <View style={{ height: rp(40) }} />
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
+
+      {/* Full screen photo viewer */}
+      <PhotoViewer
+        visible={showPhoto}
+        photoUri={matchInfo?.photo}
+        onClose={() => setShowPhoto(false)}
+      />
+    </>
+  );
+}
+
+// ── Main Chat Screen ──────────────────────────────────────────────────────────
 export default function ChatScreen() {
   const { matchId } = useLocalSearchParams();
   const router = useRouter();
   const dispatch = useDispatch();
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const { COLORS, FONTS, RADIUS } = useTheme();
 
   const currentUser = useSelector(selectUser);
   const messages = useSelector(selectMessages(matchId));
@@ -66,12 +987,17 @@ export default function ChatScreen() {
 
   useEffect(() => {
     const match = matches.find(
-      (m) => m.matchId.toString() === matchId.toString()
+      (m) => m.matchId?.toString() === matchId?.toString()
     );
     if (match) {
+      // Pass the full cosmicCard — populated from fetchMatches backend response
+      // OR from addMatch with full cosmicCard (fixed in matchesSlice + discover)
       setMatchInfo({
         name: match.user?.name,
+        age: match.user?.age,
+        photo: match.user?.photo || match.user?.photos?.[0] || null,
         nakshatra: match.user?.cosmicCard?.nakshatra,
+        cosmicCard: match.user?.cosmicCard || {},
         gunaScore: match.compatibility?.gunaScore,
         verdict: match.compatibility?.verdict,
         userId: match.user?.id,
@@ -97,23 +1023,22 @@ export default function ChatScreen() {
       if (!socket) return;
       socket.emit("join:matches", [matchId]);
       socket.on("message:new", (msg) => {
-        if (msg.matchId.toString() === matchId.toString()) {
+        if (msg.matchId?.toString() === matchId?.toString()) {
           dispatch(addMessage({ matchId, message: msg }));
           scrollToBottom();
         }
       });
       socket.on("typing:start", ({ matchId: mid }) => {
-        if (mid.toString() === matchId.toString()) setTheirTyping(true);
+        if (mid?.toString() === matchId?.toString()) setTheirTyping(true);
       });
       socket.on("typing:stop", ({ matchId: mid }) => {
-        if (mid.toString() === matchId.toString()) setTheirTyping(false);
+        if (mid?.toString() === matchId?.toString()) setTheirTyping(false);
       });
     } catch {}
   };
 
-  const scrollToBottom = () => {
+  const scrollToBottom = () =>
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-  };
 
   const handleTyping = (text) => {
     setInputText(text);
@@ -160,24 +1085,26 @@ export default function ChatScreen() {
         style={{
           flexDirection: "row",
           alignItems: "flex-end",
-          gap: SPACING.sm,
-          marginVertical: 2,
+          gap: rs(8),
+          marginVertical: rp(2),
           justifyContent: mine ? "flex-end" : "flex-start",
         }}
       >
         {!mine && (
           <View
             style={{
-              width: 28,
-              height: 28,
-              borderRadius: 14,
+              width: rs(28),
+              height: rs(28),
+              borderRadius: rs(14),
               backgroundColor: COLORS.bgElevated,
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <Text style={{ fontSize: 14 }}>
-              {matchInfo?.nakshatra?.split(" ")[0] || "🌟"}
+            <Text style={{ fontSize: rf(14) }}>
+              {matchInfo?.cosmicCard?.nakshatra?.split(" ")[0] ||
+                matchInfo?.nakshatra?.split(" ")[0] ||
+                "🌟"}
             </Text>
           </View>
         )}
@@ -185,8 +1112,8 @@ export default function ChatScreen() {
           style={{
             maxWidth: "75%",
             borderRadius: RADIUS.lg,
-            padding: SPACING.sm + 2,
-            paddingHorizontal: SPACING.md,
+            padding: rp(10),
+            paddingHorizontal: rp(14),
             backgroundColor: mine ? COLORS.gold : COLORS.bgElevated,
             borderBottomRightRadius: mine ? 4 : RADIUS.lg,
             borderBottomLeftRadius: mine ? RADIUS.lg : 4,
@@ -195,9 +1122,9 @@ export default function ChatScreen() {
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 15,
-              color: mine ? COLORS.bg : COLORS.textPrimary,
-              lineHeight: 21,
+              fontSize: rf(15),
+              color: mine ? "#fff" : COLORS.textPrimary,
+              lineHeight: rf(21),
             }}
           >
             {item.text}
@@ -205,10 +1132,10 @@ export default function ChatScreen() {
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 10,
-              color: mine ? "rgba(0,0,0,0.4)" : COLORS.textSecondary,
+              fontSize: rf(10),
+              color: mine ? "rgba(255,255,255,0.6)" : COLORS.textSecondary,
               textAlign: "right",
-              marginTop: 2,
+              marginTop: rp(2),
             }}
           >
             {new Date(item.createdAt).toLocaleTimeString("en-IN", {
@@ -234,22 +1161,22 @@ export default function ChatScreen() {
         style={{
           flexDirection: "row",
           alignItems: "center",
-          paddingTop: 56,
-          paddingBottom: SPACING.md,
-          paddingHorizontal: SPACING.md,
+          paddingTop: rs(56),
+          paddingBottom: rp(12),
+          paddingHorizontal: rp(12),
           borderBottomWidth: 1,
           borderBottomColor: COLORS.border,
-          gap: SPACING.sm,
+          gap: rs(8),
         }}
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          style={{ padding: SPACING.sm }}
+          style={{ padding: rp(8) }}
         >
           <Text
             style={{
               fontFamily: FONTS.bodyBold,
-              fontSize: 22,
+              fontSize: rf(22),
               color: COLORS.textPrimary,
             }}
           >
@@ -260,7 +1187,7 @@ export default function ChatScreen() {
           <Text
             style={{
               fontFamily: FONTS.bodyBold,
-              fontSize: 17,
+              fontSize: rf(17),
               color: COLORS.textPrimary,
             }}
           >
@@ -270,7 +1197,7 @@ export default function ChatScreen() {
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 12,
+                fontSize: rf(12),
                 color: COLORS.textSecondary,
               }}
             >
@@ -278,19 +1205,19 @@ export default function ChatScreen() {
             </Text>
           )}
         </View>
-        {/* Profile view */}
         <TouchableOpacity
-          style={{ padding: SPACING.sm }}
+          style={{ padding: rp(8) }}
           onPress={() => setShowProfile(true)}
         >
-          <Text style={{ fontSize: 22 }}>👤</Text>
+          <Text style={{ fontSize: rf(22) }}>👤</Text>
         </TouchableOpacity>
-        {/* Block/report — ⋯ menu */}
         <TouchableOpacity
-          style={{ padding: SPACING.sm }}
+          style={{ padding: rp(8) }}
           onPress={() => setShowBlockReport(true)}
         >
-          <Text style={{ fontSize: 22, color: COLORS.textSecondary }}>⋯</Text>
+          <Text style={{ fontSize: rf(22), color: COLORS.textSecondary }}>
+            ⋯
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -307,11 +1234,7 @@ export default function ChatScreen() {
           data={messages}
           keyExtractor={(m) => m._id.toString()}
           renderItem={renderMessage}
-          contentContainerStyle={{
-            padding: SPACING.md,
-            gap: SPACING.sm,
-            flexGrow: 1,
-          }}
+          contentContainerStyle={{ padding: rp(14), gap: rp(4), flexGrow: 1 }}
           onContentSizeChange={scrollToBottom}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
@@ -319,20 +1242,20 @@ export default function ChatScreen() {
               <View
                 style={{
                   alignItems: "center",
-                  marginBottom: SPACING.xl,
-                  padding: SPACING.md,
-                  backgroundColor: COLORS.bgElevated,
+                  marginBottom: rp(20),
+                  padding: rp(14),
+                  backgroundColor: COLORS.gold + "15",
                   borderRadius: RADIUS.lg,
                   borderWidth: 1,
-                  borderColor: COLORS.gold,
+                  borderColor: COLORS.gold + "40",
                 }}
               >
                 <Text
                   style={{
                     fontFamily: FONTS.bodyBold,
-                    fontSize: 15,
+                    fontSize: rf(15),
                     color: COLORS.gold,
-                    marginBottom: 2,
+                    marginBottom: rp(2),
                   }}
                 >
                   🎊 You matched with {matchInfo.name}!
@@ -340,7 +1263,7 @@ export default function ChatScreen() {
                 <Text
                   style={{
                     fontFamily: FONTS.body,
-                    fontSize: 12,
+                    fontSize: rf(12),
                     color: COLORS.textSecondary,
                   }}
                 >
@@ -355,16 +1278,16 @@ export default function ChatScreen() {
                 flex: 1,
                 alignItems: "center",
                 justifyContent: "center",
-                paddingTop: 80,
+                paddingTop: rp(80),
               }}
             >
-              <Text style={{ fontSize: 48, marginBottom: SPACING.md }}>💬</Text>
+              <Text style={{ fontSize: rf(48), marginBottom: rs(16) }}>💬</Text>
               <Text
                 style={{
                   fontFamily: FONTS.bodyBold,
-                  fontSize: 18,
+                  fontSize: rf(18),
                   color: COLORS.textPrimary,
-                  marginBottom: SPACING.xs,
+                  marginBottom: rp(6),
                 }}
               >
                 Say hello to {matchInfo?.name || "your match"}!
@@ -372,30 +1295,30 @@ export default function ChatScreen() {
               <Text
                 style={{
                   fontFamily: FONTS.body,
-                  fontSize: 13,
+                  fontSize: rf(13),
                   color: COLORS.textSecondary,
                 }}
               >
-                You're cosmically connected. Break the ice ✨
+                You're cosmically connected ✨
               </Text>
             </View>
           }
           ListFooterComponent={
             theirTyping ? (
-              <View style={{ paddingLeft: 44, marginTop: SPACING.xs }}>
+              <View style={{ paddingLeft: rs(44), marginTop: rp(6) }}>
                 <View
                   style={{
                     backgroundColor: COLORS.bgElevated,
                     borderRadius: RADIUS.lg,
-                    paddingVertical: SPACING.sm,
-                    paddingHorizontal: SPACING.md,
+                    paddingVertical: rp(8),
+                    paddingHorizontal: rp(14),
                     alignSelf: "flex-start",
                   }}
                 >
                   <Text
                     style={{
                       fontFamily: FONTS.body,
-                      fontSize: 16,
+                      fontSize: rf(18),
                       color: COLORS.textSecondary,
                       letterSpacing: 3,
                     }}
@@ -409,17 +1332,17 @@ export default function ChatScreen() {
         />
       )}
 
-      {/* Input bar */}
+      {/* Input */}
       <View
         style={{
           flexDirection: "row",
           alignItems: "flex-end",
-          padding: SPACING.md,
-          paddingBottom: 28,
+          padding: rp(12),
+          paddingBottom: rs(28),
           borderTopWidth: 1,
           borderTopColor: COLORS.border,
           backgroundColor: COLORS.bg,
-          gap: SPACING.sm,
+          gap: rs(8),
         }}
       >
         <TextInput
@@ -429,12 +1352,12 @@ export default function ChatScreen() {
             borderRadius: RADIUS.lg,
             borderWidth: 1,
             borderColor: COLORS.border,
-            paddingHorizontal: SPACING.md,
-            paddingVertical: SPACING.sm + 2,
+            paddingHorizontal: rp(14),
+            paddingVertical: rp(10),
             fontFamily: FONTS.body,
-            fontSize: 15,
+            fontSize: rf(15),
             color: COLORS.textPrimary,
-            maxHeight: 100,
+            maxHeight: rs(100),
           }}
           placeholder="Type a message..."
           placeholderTextColor={COLORS.textDim}
@@ -442,13 +1365,12 @@ export default function ChatScreen() {
           onChangeText={handleTyping}
           multiline
           maxLength={1000}
-          returnKeyType="default"
         />
         <TouchableOpacity
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
+            width: rs(44),
+            height: rs(44),
+            borderRadius: rs(22),
             backgroundColor: inputText.trim() ? COLORS.gold : COLORS.bgElevated,
             alignItems: "center",
             justifyContent: "center",
@@ -459,8 +1381,8 @@ export default function ChatScreen() {
           <Text
             style={{
               fontFamily: FONTS.bodyBold,
-              fontSize: 18,
-              color: inputText.trim() ? COLORS.bg : COLORS.textDim,
+              fontSize: rf(18),
+              color: inputText.trim() ? "#fff" : COLORS.textDim,
             }}
           >
             ✦
@@ -468,136 +1390,11 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Profile modal */}
-      <Modal
+      <ProfileModal
         visible={showProfile}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowProfile(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 20,
-              paddingTop: 56,
-              paddingBottom: 16,
-              borderBottomWidth: 1,
-              borderBottomColor: COLORS.border,
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => setShowProfile(false)}
-              style={{ padding: 8 }}
-            >
-              <Text
-                style={{
-                  fontFamily: FONTS.bodyBold,
-                  fontSize: 22,
-                  color: COLORS.textPrimary,
-                }}
-              >
-                ←
-              </Text>
-            </TouchableOpacity>
-            <Text
-              style={{
-                fontFamily: FONTS.bodyBold,
-                fontSize: 17,
-                color: COLORS.textPrimary,
-                marginLeft: 8,
-              }}
-            >
-              {matchInfo?.name || "Profile"}
-            </Text>
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
-            <View
-              style={{
-                backgroundColor: COLORS.bgCard,
-                borderRadius: 16,
-                padding: 20,
-                borderWidth: 1,
-                borderColor: COLORS.border,
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: FONTS.body,
-                  fontSize: 11,
-                  color: COLORS.gold,
-                  letterSpacing: 3,
-                  marginBottom: 8,
-                }}
-              >
-                COSMIC IDENTITY
-              </Text>
-              <Text
-                style={{
-                  fontFamily: FONTS.headingBold,
-                  fontSize: 24,
-                  color: COLORS.textPrimary,
-                  marginBottom: 4,
-                }}
-              >
-                {matchInfo?.nakshatra || "—"}
-              </Text>
-              <Text
-                style={{
-                  fontFamily: FONTS.body,
-                  fontSize: 14,
-                  color: COLORS.textSecondary,
-                }}
-              >
-                {matchInfo?.name}, your cosmic match
-              </Text>
-            </View>
-            <View
-              style={{
-                backgroundColor: COLORS.bgCard,
-                borderRadius: 16,
-                padding: 20,
-                borderWidth: 1,
-                borderColor: COLORS.border,
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: FONTS.body,
-                  fontSize: 11,
-                  color: COLORS.gold,
-                  letterSpacing: 3,
-                  marginBottom: 8,
-                }}
-              >
-                COMPATIBILITY
-              </Text>
-              <Text
-                style={{
-                  fontFamily: FONTS.headingBold,
-                  fontSize: 32,
-                  color: COLORS.gold,
-                }}
-              >
-                {matchInfo?.gunaScore}/36
-              </Text>
-              <Text
-                style={{
-                  fontFamily: FONTS.bodyMedium,
-                  fontSize: 15,
-                  color: COLORS.textPrimary,
-                  marginTop: 4,
-                }}
-              >
-                {matchInfo?.verdict}
-              </Text>
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
-
-      {/* Block/Report modal */}
+        matchInfo={matchInfo}
+        onClose={() => setShowProfile(false)}
+      />
       {matchInfo && (
         <BlockReportModal
           visible={showBlockReport}

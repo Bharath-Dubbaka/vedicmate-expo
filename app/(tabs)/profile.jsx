@@ -7,15 +7,15 @@ import { useState, useCallback } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
-  Modal,
-  TextInput,
   ActivityIndicator,
   Switch,
   Image,
+  Dimensions,
+  TextInput,
+  Modal,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { useDispatch, useSelector } from "react-redux";
@@ -26,58 +26,97 @@ import { useTheme } from "../../context/ThemeContext";
 import { usePremium } from "../hooks/usePremium";
 import PaywallModal from "./paywall";
 import ThemeToggle from "../../components/ThemeToggle";
+import BrandHeader from "../../components/BrandHeader";
 import { useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import { rf, rs, rp } from "../../constants/responsive";
 
-const KOOTA_INFO = [
-  { key: "nadi", name: "Nadi", emoji: "🌊", max: 8, desc: "Health & genetics" },
+const { width: SCREEN_W } = Dimensions.get("window");
+
+// Own Koota attribute cards — rich version with color + description + why it matters
+const OWN_KOOTA_INFO = [
   {
-    key: "bhakoot",
-    name: "Bhakoot",
-    emoji: "🌕",
-    max: 7,
-    desc: "Emotional compatibility",
+    key: "nadi",
+    name: "Nadi",
+    emoji: "🌊",
+    field: "nadi",
+    maxPts: 8,
+    colorKey: "gold",
+    desc: "Body constitution — Vata / Pitta / Kapha",
+    why: "Highest weight (8pts). If both partners share same Nadi = 0 pts. Different Nadi = full 8.",
   },
-  { key: "gana", name: "Gana", emoji: "✨", max: 6, desc: "Temperament" },
   {
-    key: "grahaMaitri",
-    name: "Graha Maitri",
-    emoji: "🪐",
-    max: 5,
-    desc: "Mental compatibility",
+    key: "gana",
+    name: "Gana",
+    emoji: "✨",
+    field: "gana",
+    maxPts: 6,
+    colorKey: "deva",
+    desc: "Soul temperament — Deva / Manushya / Rakshasa",
+    why: "Same Gana or compatible pairs score 5-6 pts. Deva+Rakshasa = 0 pts.",
   },
   {
     key: "yoni",
     name: "Yoni",
     emoji: "🐾",
-    max: 4,
-    desc: "Physical compatibility",
-  },
-  {
-    key: "tara",
-    name: "Tara",
-    emoji: "⭐",
-    max: 3,
-    desc: "Birth star harmony",
+    field: "animal",
+    maxPts: 4,
+    colorKey: "manushya",
+    desc: "Symbolic spirit animal — physical compatibility",
+    why: "Friend animal pairs = 4 pts. Enemy pairs = 0. There are 14 yoni animals.",
   },
   {
     key: "vashya",
     name: "Vashya",
     emoji: "💫",
-    max: 2,
-    desc: "Mutual attraction",
+    field: "vashya",
+    maxPts: 2,
+    colorKey: "teal",
+    desc: "Magnetic influence type — attraction pull",
+    why: "If one person is naturally in the other's sphere of influence = higher score.",
   },
   {
     key: "varna",
     name: "Varna",
     emoji: "📿",
-    max: 1,
-    desc: "Spiritual compatibility",
+    field: "varna",
+    maxPts: 1,
+    colorKey: "gold",
+    desc: "Spiritual class — Brahmin / Kshatriya / Vaishya / Shudra",
+    why: "Groom's Varna should be equal or higher than Bride's for 1 point.",
   },
 ];
 
+const GANA_DETAIL = {
+  Deva: {
+    color: "#A78BFA",
+    desc: "Naturally compassionate, spiritually inclined, harmonious.",
+  },
+  Manushya: {
+    color: "#60A5FA",
+    desc: "Balanced heart and mind. Practical, warm, loyal.",
+  },
+  Rakshasa: {
+    color: "#F87171",
+    desc: "Intense, independent, magnetic. Pairs best with Rakshasa.",
+  },
+};
+
+const NADI_DETAIL = {
+  Vata: { element: "Air", desc: "Quick mind, creative, adaptable." },
+  Pitta: { element: "Fire", desc: "Passionate, focused, driven." },
+  Kapha: { element: "Water", desc: "Calm, nurturing, steadfast." },
+  Antya: { element: "Water", desc: "Ending Nadi — pairs best with Aadi." },
+  Madhya: {
+    element: "Air",
+    desc: "Middle Nadi — pairs best with Antya or Aadi.",
+  },
+  Aadi: { element: "Fire", desc: "Beginning Nadi — pairs best with Madhya." },
+};
+
+// ── Bio inline editor ─────────────────────────────────────────────────────────
 function BioSection({ bio, onSaved }) {
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const { COLORS, FONTS, RADIUS } = useTheme();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(bio || "");
   const [saving, setSaving] = useState(false);
@@ -93,7 +132,7 @@ function BioSection({ bio, onSaved }) {
       onSaved(value.trim());
       setEditing(false);
     } catch (err) {
-      Alert.alert("Error", err.message || "Failed to save bio");
+      Alert.alert("Error", err.message);
     } finally {
       setSaving(false);
     }
@@ -107,23 +146,23 @@ function BioSection({ bio, onSaved }) {
           borderRadius: RADIUS.md,
           borderWidth: 1,
           borderColor: COLORS.gold,
-          padding: SPACING.sm,
+          padding: rp(10),
         }}
       >
         <TextInput
           style={{
             fontFamily: FONTS.body,
-            fontSize: 14,
+            fontSize: rf(14),
             color: COLORS.textPrimary,
-            minHeight: 80,
-            padding: SPACING.sm,
+            minHeight: rs(80),
+            padding: rp(8),
+            textAlignVertical: "top",
           }}
           value={value}
           onChangeText={setValue}
           multiline
           maxLength={300}
           autoFocus
-          textAlignVertical="top"
           placeholderTextColor={COLORS.textDim}
           placeholder="Tell potential matches about yourself..."
           onBlur={handleSave}
@@ -132,15 +171,14 @@ function BioSection({ bio, onSaved }) {
           style={{
             flexDirection: "row",
             justifyContent: "space-between",
-            alignItems: "center",
-            marginTop: 4,
-            paddingHorizontal: SPACING.sm,
+            marginTop: rp(4),
+            paddingHorizontal: rp(8),
           }}
         >
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 11,
+              fontSize: rf(11),
               color: COLORS.textDim,
             }}
           >
@@ -150,20 +188,20 @@ function BioSection({ bio, onSaved }) {
             style={{
               backgroundColor: COLORS.gold,
               borderRadius: RADIUS.sm,
-              paddingHorizontal: SPACING.md,
-              paddingVertical: 5,
+              paddingHorizontal: rp(12),
+              paddingVertical: rp(5),
             }}
             onPress={handleSave}
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator size="small" color={COLORS.bg} />
+              <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Text
                 style={{
                   fontFamily: FONTS.bodyBold,
-                  fontSize: 13,
-                  color: COLORS.bg,
+                  fontSize: rf(13),
+                  color: "#fff",
                 }}
               >
                 Save
@@ -174,16 +212,15 @@ function BioSection({ bio, onSaved }) {
       </View>
     );
   }
-
   return (
     <TouchableOpacity
       style={{
         backgroundColor: COLORS.bgElevated,
         borderRadius: RADIUS.md,
-        padding: SPACING.md,
+        padding: rp(14),
         borderWidth: 1,
         borderColor: COLORS.border,
-        minHeight: 56,
+        minHeight: rs(56),
       }}
       onPress={() => setEditing(true)}
       activeOpacity={0.7}
@@ -192,9 +229,9 @@ function BioSection({ bio, onSaved }) {
         <Text
           style={{
             fontFamily: FONTS.body,
-            fontSize: 14,
+            fontSize: rf(14),
             color: COLORS.textPrimary,
-            lineHeight: 20,
+            lineHeight: rf(20),
           }}
         >
           {bio}
@@ -203,7 +240,7 @@ function BioSection({ bio, onSaved }) {
         <Text
           style={{
             fontFamily: FONTS.body,
-            fontSize: 14,
+            fontSize: rf(14),
             color: COLORS.textDim,
             fontStyle: "italic",
           }}
@@ -214,9 +251,9 @@ function BioSection({ bio, onSaved }) {
       <Text
         style={{
           fontFamily: FONTS.body,
-          fontSize: 10,
+          fontSize: rf(10),
           color: COLORS.textDim,
-          marginTop: 6,
+          marginTop: rp(6),
           letterSpacing: 1,
         }}
       >
@@ -226,149 +263,14 @@ function BioSection({ bio, onSaved }) {
   );
 }
 
-function EditProfileModal({ visible, user, onClose, onSaved }) {
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
-  const [name, setName] = useState(user?.name || "");
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert("Required", "Please enter your name.");
-      return;
-    }
-    try {
-      setSaving(true);
-      await authAPI.updateMe({ name: name.trim() });
-      onSaved({ name: name.trim() });
-    } catch (err) {
-      Alert.alert("Error", err.response?.data?.message || err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            paddingHorizontal: SPACING.xl,
-            paddingTop: 56,
-            paddingBottom: SPACING.lg,
-            borderBottomWidth: 1,
-            borderBottomColor: COLORS.border,
-          }}
-        >
-          <TouchableOpacity onPress={onClose}>
-            <Text
-              style={{
-                fontFamily: FONTS.body,
-                fontSize: 16,
-                color: COLORS.textSecondary,
-              }}
-            >
-              Cancel
-            </Text>
-          </TouchableOpacity>
-          <Text
-            style={{
-              fontFamily: FONTS.headingBold,
-              fontSize: 14,
-              color: COLORS.gold,
-              letterSpacing: 3,
-            }}
-          >
-            EDIT PROFILE
-          </Text>
-          <TouchableOpacity onPress={handleSave} disabled={saving}>
-            <Text
-              style={{
-                fontFamily: FONTS.bodyBold,
-                fontSize: 16,
-                color: COLORS.gold,
-                opacity: saving ? 0.5 : 1,
-              }}
-            >
-              {saving ? "Saving..." : "Save"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView contentContainerStyle={{ padding: SPACING.xl }}>
-          <View
-            style={{
-              backgroundColor: COLORS.bgCard,
-              borderRadius: RADIUS.xl,
-              padding: SPACING.lg,
-              marginBottom: SPACING.lg,
-              borderWidth: 1,
-              borderColor: COLORS.border,
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: FONTS.body,
-                fontSize: 10,
-                color: COLORS.textDim,
-                letterSpacing: 3,
-                marginBottom: SPACING.sm,
-              }}
-            >
-              DISPLAY NAME
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: COLORS.bgElevated,
-                borderRadius: RADIUS.md,
-                borderWidth: 1,
-                borderColor: COLORS.border,
-                paddingHorizontal: SPACING.md,
-                paddingVertical: SPACING.md,
-                fontFamily: FONTS.bodyMedium,
-                fontSize: 16,
-                color: COLORS.textPrimary,
-              }}
-              value={name}
-              onChangeText={setName}
-              placeholder="Your name"
-              placeholderTextColor={COLORS.textDim}
-              autoCapitalize="words"
-              maxLength={50}
-            />
-          </View>
-          <Text
-            style={{
-              fontFamily: FONTS.body,
-              fontSize: 12,
-              color: COLORS.textDim,
-              textAlign: "center",
-              lineHeight: 18,
-              paddingHorizontal: SPACING.xl,
-            }}
-          >
-            Only your display name can be changed. Age, gender and birth details
-            are permanent.
-          </Text>
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-}
-
+// ── Edit Preferences Modal ────────────────────────────────────────────────────
 function EditPrefsModal({ visible, user, onClose, onSaved }) {
   const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
   const [minAge, setMinAge] = useState(user?.preferences?.minAge ?? 18);
   const [maxAge, setMaxAge] = useState(user?.preferences?.maxAge ?? 45);
   const [minGuna, setMinGuna] = useState(user?.preferences?.minGunaScore ?? 18);
   const [genderPref, setGenderPref] = useState(
-    user?.preferences?.genderPref ?? "female"
+    user?.preferences?.genderPref ?? "both"
   );
   const [lookingFor, setLookingFor] = useState(user?.lookingFor ?? "both");
   const [saving, setSaving] = useState(false);
@@ -414,9 +316,9 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             flexDirection: "row",
             justifyContent: "space-between",
             alignItems: "center",
-            paddingHorizontal: SPACING.xl,
-            paddingTop: 56,
-            paddingBottom: SPACING.lg,
+            paddingHorizontal: rp(20),
+            paddingTop: rs(56),
+            paddingBottom: rp(16),
             borderBottomWidth: 1,
             borderBottomColor: COLORS.border,
           }}
@@ -425,7 +327,7 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 16,
+                fontSize: rf(16),
                 color: COLORS.textSecondary,
               }}
             >
@@ -435,7 +337,7 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
           <Text
             style={{
               fontFamily: FONTS.headingBold,
-              fontSize: 14,
+              fontSize: rf(14),
               color: COLORS.gold,
               letterSpacing: 3,
             }}
@@ -446,7 +348,7 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.bodyBold,
-                fontSize: 16,
+                fontSize: rf(16),
                 color: COLORS.gold,
                 opacity: saving ? 0.5 : 1,
               }}
@@ -455,14 +357,15 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             </Text>
           </TouchableOpacity>
         </View>
-        <ScrollView contentContainerStyle={{ padding: SPACING.xl }}>
+
+        <ScrollView contentContainerStyle={{ padding: rp(20) }}>
           {/* Age range */}
           <View
             style={{
               backgroundColor: COLORS.bgCard,
               borderRadius: RADIUS.xl,
-              padding: SPACING.lg,
-              marginBottom: SPACING.lg,
+              padding: rp(18),
+              marginBottom: rp(16),
               borderWidth: 1,
               borderColor: COLORS.border,
             }}
@@ -470,10 +373,10 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 10,
+                fontSize: rf(10),
                 color: COLORS.textDim,
                 letterSpacing: 3,
-                marginBottom: 4,
+                marginBottom: rp(4),
               }}
             >
               AGE RANGE
@@ -481,9 +384,9 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.headingBold,
-                fontSize: 22,
+                fontSize: rf(22),
                 color: COLORS.textPrimary,
-                marginBottom: SPACING.md,
+                marginBottom: rp(14),
               }}
             >
               {minAge} – {maxAge} yrs
@@ -491,9 +394,9 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 13,
+                fontSize: rf(13),
                 color: COLORS.textSecondary,
-                marginBottom: 4,
+                marginBottom: rp(4),
               }}
             >
               Min: {minAge}
@@ -511,9 +414,10 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 13,
+                fontSize: rf(13),
                 color: COLORS.textSecondary,
-                marginBottom: 4,
+                marginTop: rp(8),
+                marginBottom: rp(4),
               }}
             >
               Max: {maxAge}
@@ -529,13 +433,14 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
               thumbTintColor={COLORS.gold}
             />
           </View>
+
           {/* Min Guna */}
           <View
             style={{
               backgroundColor: COLORS.bgCard,
               borderRadius: RADIUS.xl,
-              padding: SPACING.lg,
-              marginBottom: SPACING.lg,
+              padding: rp(18),
+              marginBottom: rp(16),
               borderWidth: 1,
               borderColor: COLORS.border,
             }}
@@ -543,10 +448,10 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 10,
+                fontSize: rf(10),
                 color: COLORS.textDim,
                 letterSpacing: 3,
-                marginBottom: 4,
+                marginBottom: rp(4),
               }}
             >
               MINIMUM GUNA SCORE
@@ -554,29 +459,29 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.headingBold,
-                fontSize: 22,
+                fontSize: rf(22),
                 color: COLORS.textPrimary,
-                marginBottom: SPACING.sm,
+                marginBottom: rp(6),
               }}
             >
-              {minGuna === 1 ? "Any" : `${minGuna} / 36`}
+              {minGuna <= 1 ? "Any score" : `${minGuna} / 36`}
             </Text>
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 12,
+                fontSize: rf(12),
                 color: COLORS.textSecondary,
-                marginBottom: SPACING.md,
+                marginBottom: rp(10),
                 fontStyle: "italic",
               }}
             >
               {minGuna <= 1
-                ? "⚠️ Any score — all profiles appear"
+                ? "⚠️ All profiles appear regardless of score"
                 : minGuna < 18
-                ? "⚠️ Low — many profiles may appear"
+                ? "⚠️ Low — many profiles will appear"
                 : minGuna < 24
-                ? "✅ Balanced baseline"
-                : "🌟 Only strong matches"}
+                ? "✅ Balanced — good starting point"
+                : "🌟 High — only strong matches"}
             </Text>
             <Slider
               minimumValue={1}
@@ -589,13 +494,14 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
               thumbTintColor={COLORS.gold}
             />
           </View>
+
           {/* Show me */}
           <View
             style={{
               backgroundColor: COLORS.bgCard,
               borderRadius: RADIUS.xl,
-              padding: SPACING.lg,
-              marginBottom: SPACING.lg,
+              padding: rp(18),
+              marginBottom: rp(16),
               borderWidth: 1,
               borderColor: COLORS.border,
             }}
@@ -603,41 +509,43 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 10,
+                fontSize: rf(10),
                 color: COLORS.textDim,
                 letterSpacing: 3,
-                marginBottom: SPACING.sm,
+                marginBottom: rp(12),
               }}
             >
               SHOW ME
             </Text>
-            <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+            <View style={{ flexDirection: "row", gap: rp(10) }}>
               {GENDER_OPTIONS.map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
                   style={{
                     flex: 1,
                     alignItems: "center",
-                    paddingVertical: SPACING.sm,
+                    paddingVertical: rp(12),
                     borderRadius: RADIUS.full,
                     borderWidth: 1,
                     borderColor:
                       genderPref === opt.value ? COLORS.gold : COLORS.border,
                     backgroundColor:
-                      genderPref === opt.value ? COLORS.gold : "transparent",
+                      genderPref === opt.value
+                        ? COLORS.gold + "15"
+                        : "transparent",
                   }}
                   onPress={() => setGenderPref(opt.value)}
                 >
-                  <Text style={{ fontSize: 18, marginBottom: 4 }}>
+                  <Text style={{ fontSize: rf(20), marginBottom: rp(4) }}>
                     {opt.emoji}
                   </Text>
                   <Text
                     style={{
                       fontFamily: FONTS.bodyMedium,
-                      fontSize: 13,
+                      fontSize: rf(13),
                       color:
                         genderPref === opt.value
-                          ? COLORS.bg
+                          ? COLORS.gold
                           : COLORS.textSecondary,
                     }}
                   >
@@ -647,13 +555,14 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
               ))}
             </View>
           </View>
+
           {/* Looking for */}
           <View
             style={{
               backgroundColor: COLORS.bgCard,
               borderRadius: RADIUS.xl,
-              padding: SPACING.lg,
-              marginBottom: SPACING.lg,
+              padding: rp(18),
+              marginBottom: rp(16),
               borderWidth: 1,
               borderColor: COLORS.border,
             }}
@@ -661,38 +570,37 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 10,
+                fontSize: rf(10),
                 color: COLORS.textDim,
                 letterSpacing: 3,
-                marginBottom: SPACING.sm,
+                marginBottom: rp(12),
               }}
             >
               LOOKING FOR
             </Text>
-            <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+            <View style={{ flexDirection: "row", gap: rp(10) }}>
               {LOOKING_OPTIONS.map((opt) => (
                 <TouchableOpacity
                   key={opt}
                   style={{
                     flex: 1,
                     alignItems: "center",
-                    paddingHorizontal: SPACING.lg,
-                    paddingVertical: SPACING.sm,
+                    paddingVertical: rp(10),
                     borderRadius: RADIUS.full,
                     borderWidth: 1,
                     borderColor:
                       lookingFor === opt ? COLORS.gold : COLORS.border,
                     backgroundColor:
-                      lookingFor === opt ? COLORS.gold : "transparent",
+                      lookingFor === opt ? COLORS.gold + "15" : "transparent",
                   }}
                   onPress={() => setLookingFor(opt)}
                 >
                   <Text
                     style={{
                       fontFamily: FONTS.bodyMedium,
-                      fontSize: 14,
+                      fontSize: rf(14),
                       color:
-                        lookingFor === opt ? COLORS.bg : COLORS.textSecondary,
+                        lookingFor === opt ? COLORS.gold : COLORS.textSecondary,
                     }}
                   >
                     {opt.charAt(0).toUpperCase() + opt.slice(1)}
@@ -701,7 +609,7 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
               ))}
             </View>
           </View>
-          <View style={{ height: 40 }} />
+          <View style={{ height: rp(40) }} />
         </ScrollView>
       </View>
     </Modal>
@@ -711,18 +619,20 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
 export default function ProfileScreen() {
   const dispatch = useDispatch();
   const user = useSelector(selectUser);
-  const { COLORS, FONTS, SPACING, RADIUS, GANA_CONFIG } = useTheme();
+  const { COLORS, FONTS, RADIUS, GANA_CONFIG } = useTheme();
+
   const [loggingOut, setLoggingOut] = useState(false);
-  const [editProfile, setEditProfile] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const [editPrefs, setEditPrefs] = useState(false);
   const [notifMatch, setNotifMatch] = useState(true);
   const [notifMessage, setNotifMessage] = useState(true);
   const [notifLiked, setNotifLiked] = useState(true);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [showPaywall, setShowPaywall] = useState(false);
 
   const kundli = user?.kundli;
   const gc = kundli ? GANA_CONFIG[kundli.gana] || GANA_CONFIG.Manushya : null;
+  const gd = kundli ? GANA_DETAIL[kundli.gana] || GANA_DETAIL.Manushya : null;
+  const nd = kundli ? NADI_DETAIL[kundli.nadi] || null : null;
   const { isPremium, plan, expiresAt, refresh: refreshPremium } = usePremium();
 
   useFocusEffect(
@@ -746,11 +656,7 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleAddPhoto = async () => {
-    if ((user.photos?.length ?? 0) >= 3) {
-      Alert.alert("Limit reached", "Maximum 3 photos. Delete one first.");
-      return;
-    }
+  const handleChangePhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Permission needed", "Please allow photo access.");
@@ -759,19 +665,14 @@ export default function ProfileScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: true,
-      aspect: [4, 5],
-      quality: 0.8,
+      aspect: [3, 4],
+      quality: 0.85,
     });
     if (!result.canceled && result.assets?.[0]) {
       const uri = result.assets[0].uri;
       const filename = uri.split("/").pop();
       const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
-      const mimeType =
-        ext === "png"
-          ? "image/png"
-          : ext === "webp"
-          ? "image/webp"
-          : "image/jpeg";
+      const mimeType = ext === "png" ? "image/png" : "image/jpeg";
       const formData = new FormData();
       formData.append("photo", { uri, name: filename, type: mimeType });
       setUploadingPhoto(true);
@@ -793,429 +694,241 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleDeletePhoto = (photoUrl) => {
-    Alert.alert("Delete Photo", "Remove this photo?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const res = await authAPI.deletePhoto(photoUrl);
-            if (res.data?.success)
-              dispatch(updateUser({ photos: res.data.photos }));
-          } catch (err) {
-            Alert.alert("Error", err?.response?.data?.message || err.message);
-          }
-        },
-      },
-    ]);
-  };
-
   if (!user) return null;
+
+  const photoUri = user.photos?.[0];
+
+  const getKootaColor = (colorKey) => {
+    const map = {
+      gold: COLORS.gold,
+      deva: COLORS.deva || "#A78BFA",
+      manushya: COLORS.manushya || "#60A5FA",
+      teal: COLORS.teal || "#4ECDC4",
+    };
+    return map[colorKey] || COLORS.gold;
+  };
 
   return (
     <>
       <ScrollView
         style={{ flex: 1, backgroundColor: COLORS.bg }}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: rp(40) }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View
+        <BrandHeader title="PROFILE" showLogo />
+
+        {/* ── Big Photo Hero ─────────────────────────────────────────────── */}
+        <TouchableOpacity
+          onPress={handleChangePhoto}
+          activeOpacity={0.9}
           style={{
-            paddingHorizontal: SPACING.xl,
-            paddingTop: 56,
-            paddingBottom: SPACING.md,
+            marginHorizontal: rp(20),
+            marginTop: rp(16),
+            marginBottom: rp(20),
           }}
         >
-          <Text
-            style={{
-              fontFamily: FONTS.headingBold,
-              fontSize: 16,
-              color: COLORS.gold,
-              letterSpacing: 4,
-            }}
-          >
-            PROFILE
-          </Text>
-        </View>
-
-        {/* Hero card */}
-        {kundli && gc && (
           <View
             style={{
-              marginHorizontal: SPACING.xl,
-              borderRadius: RADIUS.xl,
-              borderWidth: 1,
-              borderColor: gc.color + "60",
-              backgroundColor: COLORS.bgCard,
-              padding: SPACING.lg,
-              marginBottom: SPACING.lg,
+              width: "100%",
+              height: SCREEN_W * 0.85,
+              borderRadius: rs(24),
+              overflow: "hidden",
+              backgroundColor: gc?.bg || COLORS.bgElevated,
+              borderWidth: 1.5,
+              borderColor: gc?.color ? gc.color + "60" : COLORS.border,
+              shadowColor: gc?.color || COLORS.gold,
+              shadowOffset: { width: 0, height: rs(8) },
+              shadowOpacity: 0.25,
+              shadowRadius: rs(20),
+              elevation: 14,
             }}
           >
-            {/* Top row */}
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: SPACING.md,
-                marginBottom: SPACING.md,
-              }}
-            >
-              <TouchableOpacity
+            {uploadingPhoto ? (
+              <View
                 style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: 36,
-                  backgroundColor: COLORS.bgElevated,
+                  flex: 1,
                   alignItems: "center",
                   justifyContent: "center",
-                  borderWidth: 2,
-                  borderColor: gc.color,
-                  overflow: "hidden",
-                  flexShrink: 0,
                 }}
-                onPress={() =>
-                  user.photos?.[0]
-                    ? handleDeletePhoto(user.photos[0])
-                    : handleAddPhoto()
-                }
-                activeOpacity={0.85}
               >
-                {user.photos?.[0] ? (
-                  <>
-                    <Image
-                      source={{ uri: user.photos[0] }}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        borderRadius: 36,
-                      }}
-                      resizeMode="cover"
-                    />
-                    <View
-                      style={{
-                        position: "absolute",
-                        bottom: 0,
-                        right: 0,
-                        width: 28,
-                        height: 28,
-                        borderRadius: 14,
-                        backgroundColor: COLORS.gold,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Text style={{ fontSize: 16 }}>📷</Text>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Text
-                      style={{
-                        fontFamily: FONTS.headingBold,
-                        fontSize: 28,
-                        color: gc.color,
-                      }}
-                    >
-                      {user.name?.[0]?.toUpperCase() || "?"}
-                    </Text>
+                <ActivityIndicator size="large" color={COLORS.gold} />
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: rf(14),
+                    color: COLORS.textSecondary,
+                    marginTop: rs(12),
+                  }}
+                >
+                  Uploading...
+                </Text>
+              </View>
+            ) : photoUri ? (
+              <>
+                <Image
+                  source={{ uri: photoUri }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
+                />
+                <View
+                  style={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    paddingHorizontal: rp(20),
+                    paddingBottom: rp(20),
+                    paddingTop: rp(60),
+                    backgroundColor: "rgba(0,0,0,0.55)",
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FONTS.headingBold,
+                      fontSize: rf(26),
+                      color: "#fff",
+                      marginBottom: rp(2),
+                    }}
+                  >
+                    {user.name}
+                  </Text>
+                  {user.age && (
                     <Text
                       style={{
                         fontFamily: FONTS.body,
-                        fontSize: 9,
-                        color: COLORS.textDim,
-                        position: "absolute",
-                        bottom: 4,
+                        fontSize: rf(14),
+                        color: "rgba(255,255,255,0.8)",
                       }}
                     >
-                      tap to add
+                      {user.age} · {user.gender || ""}
                     </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text
-                  style={{
-                    fontFamily: FONTS.headingBold,
-                    fontSize: 22,
-                    color: COLORS.textPrimary,
-                  }}
-                >
-                  {user.name}
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: FONTS.body,
-                    fontSize: 13,
-                    color: COLORS.textSecondary,
-                  }}
-                >
-                  {user.email}
-                </Text>
-                {user.age && (
-                  <Text
-                    style={{
-                      fontFamily: FONTS.body,
-                      fontSize: 12,
-                      color: COLORS.textSecondary,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {user.age} years old · {user.gender || "—"}
-                  </Text>
-                )}
+                  )}
+                  {kundli && gc && (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: rs(6),
+                        marginTop: rp(8),
+                        alignSelf: "flex-start",
+                        paddingHorizontal: rp(10),
+                        paddingVertical: rp(4),
+                        borderRadius: RADIUS.full,
+                        backgroundColor: "rgba(255,255,255,0.15)",
+                        borderWidth: 1,
+                        borderColor: "rgba(255,255,255,0.3)",
+                      }}
+                    >
+                      <Text style={{ fontSize: rf(14) }}>{gc.emoji}</Text>
+                      <Text
+                        style={{
+                          fontFamily: FONTS.bodyMedium,
+                          fontSize: rf(12),
+                          color: "#fff",
+                        }}
+                      >
+                        {kundli.nakshatra} · {gc.title}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <View
                   style={{
-                    flexDirection: "row",
+                    position: "absolute",
+                    top: rp(14),
+                    right: rp(14),
+                    width: rs(36),
+                    height: rs(36),
+                    borderRadius: rs(18),
+                    backgroundColor: "rgba(0,0,0,0.55)",
                     alignItems: "center",
-                    gap: 5,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: RADIUS.full,
-                    borderWidth: 1,
-                    borderColor: gc.color + "50",
-                    backgroundColor: gc.bg,
-                    alignSelf: "flex-start",
+                    justifyContent: "center",
                   }}
                 >
-                  <Text style={{ fontSize: 13 }}>{gc.emoji}</Text>
+                  <Text style={{ fontSize: rf(18) }}>📷</Text>
+                </View>
+              </>
+            ) : (
+              <View
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: rs(12),
+                }}
+              >
+                <Text style={{ fontSize: rf(64), opacity: 0.3 }}>👤</Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyMedium,
+                    fontSize: rf(16),
+                    color: gc?.color || COLORS.gold,
+                  }}
+                >
+                  Add your photo
+                </Text>
+                <View
+                  style={{
+                    backgroundColor: gc?.color || COLORS.gold,
+                    borderRadius: RADIUS.lg,
+                    paddingHorizontal: rp(20),
+                    paddingVertical: rp(10),
+                    marginTop: rp(8),
+                  }}
+                >
                   <Text
                     style={{
-                      fontFamily: FONTS.bodyMedium,
-                      fontSize: 12,
-                      color: gc.color,
+                      fontFamily: FONTS.bodyBold,
+                      fontSize: rf(14),
+                      color: "#fff",
                     }}
                   >
-                    {kundli.gana} · {gc.title}
+                    Upload Photo
                   </Text>
                 </View>
               </View>
-            </View>
-
-            {/* Photo grid — 3 slots */}
-            <View
-              style={{
-                flexDirection: "row",
-                gap: SPACING.sm,
-                marginBottom: SPACING.md,
-              }}
-            >
-              {[0, 1, 2].map((index) => {
-                const photo = user.photos?.[index];
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    style={{
-                      flex: 1,
-                      height: 100,
-                      borderRadius: RADIUS.md,
-                      borderWidth: 1.5,
-                      overflow: "hidden",
-                      backgroundColor: COLORS.bgElevated,
-                      borderColor: photo ? gc.color + "60" : COLORS.border,
-                    }}
-                    onPress={() =>
-                      photo ? handleDeletePhoto(photo) : handleAddPhoto()
-                    }
-                    activeOpacity={0.8}
-                  >
-                    {photo ? (
-                      <>
-                        <Image
-                          source={{ uri: photo }}
-                          style={{ width: "100%", height: "100%" }}
-                          resizeMode="cover"
-                        />
-                        <View
-                          style={{
-                            position: "absolute",
-                            top: 6,
-                            right: 6,
-                            width: 22,
-                            height: 22,
-                            borderRadius: 11,
-                            backgroundColor: "rgba(0,0,0,0.6)",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontFamily: FONTS.bodyBold,
-                              fontSize: 11,
-                              color: "#fff",
-                            }}
-                          >
-                            ✕
-                          </Text>
-                        </View>
-                      </>
-                    ) : (
-                      <View
-                        style={{
-                          flex: 1,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 4,
-                        }}
-                      >
-                        {uploadingPhoto &&
-                        index === (user.photos?.length ?? 0) ? (
-                          <ActivityIndicator size="small" color={COLORS.gold} />
-                        ) : (
-                          <>
-                            <Text
-                              style={{
-                                fontFamily: FONTS.headingBold,
-                                fontSize: 24,
-                                color: COLORS.textDim,
-                              }}
-                            >
-                              +
-                            </Text>
-                            <Text
-                              style={{
-                                fontFamily: FONTS.body,
-                                fontSize: 10,
-                                color: COLORS.textDim,
-                                letterSpacing: 1,
-                              }}
-                            >
-                              {index === 0 ? "Main" : `Photo ${index + 1}`}
-                            </Text>
-                          </>
-                        )}
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Edit name button */}
-            <TouchableOpacity
-              style={{
-                backgroundColor: COLORS.bgElevated,
-                borderRadius: RADIUS.md,
-                borderWidth: 1,
-                borderColor: COLORS.border,
-                paddingVertical: SPACING.sm,
-                alignItems: "center",
-                marginBottom: SPACING.md,
-              }}
-              onPress={() => setEditProfile(true)}
-            >
-              <Text
-                style={{
-                  fontFamily: FONTS.bodyMedium,
-                  fontSize: 13,
-                  color: COLORS.textSecondary,
-                }}
-              >
-                ✏️ Edit Name
-              </Text>
-            </TouchableOpacity>
-
-            {/* Nakshatra row */}
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: SPACING.sm,
-                borderRadius: RADIUS.lg,
-                borderWidth: 1,
-                borderColor: gc.color + "30",
-                backgroundColor: gc.bg,
-                padding: SPACING.md,
-                marginBottom: SPACING.md,
-              }}
-            >
-              <Text style={{ fontSize: 36 }}>{kundli.nakshatraSymbol}</Text>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontFamily: FONTS.headingBold,
-                    fontSize: 18,
-                    color: COLORS.textPrimary,
-                  }}
-                >
-                  {kundli.nakshatra}
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: FONTS.body,
-                    fontSize: 12,
-                    color: COLORS.textSecondary,
-                    marginTop: 2,
-                  }}
-                >
-                  {kundli.rashi} Moon · Pada {kundli.pada}
-                </Text>
-              </View>
-              <View style={{ alignItems: "center", paddingLeft: SPACING.sm }}>
-                <Text
-                  style={{
-                    fontFamily: FONTS.body,
-                    fontSize: 9,
-                    color: COLORS.textDim,
-                    letterSpacing: 2,
-                  }}
-                >
-                  LORD
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: FONTS.bodyBold,
-                    fontSize: 13,
-                    color: COLORS.gold,
-                  }}
-                >
-                  {kundli.lordPlanet}
-                </Text>
-              </View>
-            </View>
-
-            {/* Bio */}
-            <View style={{ gap: 6 }}>
-              <Text
-                style={{
-                  fontFamily: FONTS.body,
-                  fontSize: 10,
-                  color: COLORS.textDim,
-                  letterSpacing: 3,
-                }}
-              >
-                BIO
-              </Text>
-              <BioSection
-                bio={user.bio}
-                onSaved={(b) => dispatch(updateUser({ bio: b }))}
-              />
-            </View>
+            )}
           </View>
-        )}
+        </TouchableOpacity>
 
-        {/* Subscription */}
+        {/* ── Bio ─────────────────────────────────────────────────────────── */}
+        <View style={{ marginHorizontal: rp(20), marginBottom: rp(16) }}>
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: rf(10),
+              color: COLORS.textDim,
+              letterSpacing: 3,
+              marginBottom: rp(8),
+            }}
+          >
+            BIO
+          </Text>
+          <BioSection
+            bio={user.bio}
+            onSaved={(b) => dispatch(updateUser({ bio: b }))}
+          />
+        </View>
+
+        {/* ── Subscription ─────────────────────────────────────────────────── */}
         <View
           style={{
-            marginHorizontal: SPACING.xl,
+            marginHorizontal: rp(20),
             backgroundColor: COLORS.bgCard,
             borderRadius: RADIUS.xl,
             borderWidth: 1,
             borderColor: COLORS.border,
-            padding: SPACING.lg,
-            marginBottom: SPACING.lg,
+            padding: rp(18),
+            marginBottom: rp(16),
           }}
         >
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 10,
+              fontSize: rf(10),
               color: COLORS.textDim,
               letterSpacing: 3,
-              marginBottom: SPACING.md,
+              marginBottom: rp(14),
             }}
           >
             SUBSCRIPTION
@@ -1226,22 +939,21 @@ export default function ProfileScreen() {
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "space-between",
-                paddingVertical: SPACING.sm,
               }}
             >
               <View
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  gap: SPACING.sm,
+                  gap: rs(10),
                 }}
               >
-                <Text style={{ fontSize: 24 }}>👑</Text>
+                <Text style={{ fontSize: rf(24) }}>👑</Text>
                 <View>
                   <Text
                     style={{
                       fontFamily: FONTS.bodyBold,
-                      fontSize: 15,
+                      fontSize: rf(15),
                       color: COLORS.gold,
                     }}
                   >
@@ -1250,7 +962,7 @@ export default function ProfileScreen() {
                   <Text
                     style={{
                       fontFamily: FONTS.body,
-                      fontSize: 12,
+                      fontSize: rf(12),
                       color: COLORS.textSecondary,
                     }}
                   >
@@ -1269,8 +981,8 @@ export default function ProfileScreen() {
                 style={{
                   backgroundColor: COLORS.gold + "25",
                   borderRadius: RADIUS.full,
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
+                  paddingHorizontal: rp(10),
+                  paddingVertical: rp(4),
                   borderWidth: 1,
                   borderColor: COLORS.gold + "40",
                 }}
@@ -1278,7 +990,7 @@ export default function ProfileScreen() {
                 <Text
                   style={{
                     fontFamily: FONTS.bodyMedium,
-                    fontSize: 11,
+                    fontSize: rf(11),
                     color: COLORS.gold,
                   }}
                 >
@@ -1292,7 +1004,6 @@ export default function ProfileScreen() {
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "space-between",
-                paddingVertical: SPACING.sm,
               }}
               onPress={() => setShowPaywall(true)}
               activeOpacity={0.8}
@@ -1301,15 +1012,15 @@ export default function ProfileScreen() {
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  gap: SPACING.sm,
+                  gap: rs(10),
                 }}
               >
-                <Text style={{ fontSize: 24 }}>⭐</Text>
+                <Text style={{ fontSize: rf(24) }}>⭐</Text>
                 <View>
                   <Text
                     style={{
                       fontFamily: FONTS.bodyMedium,
-                      fontSize: 15,
+                      fontSize: rf(15),
                       color: COLORS.textPrimary,
                     }}
                   >
@@ -1318,7 +1029,7 @@ export default function ProfileScreen() {
                   <Text
                     style={{
                       fontFamily: FONTS.body,
-                      fontSize: 12,
+                      fontSize: rf(12),
                       color: COLORS.textSecondary,
                     }}
                   >
@@ -1330,15 +1041,15 @@ export default function ProfileScreen() {
                 style={{
                   backgroundColor: COLORS.gold,
                   borderRadius: RADIUS.md,
-                  paddingHorizontal: 12,
-                  paddingVertical: 5,
+                  paddingHorizontal: rp(12),
+                  paddingVertical: rp(6),
                 }}
               >
                 <Text
                   style={{
                     fontFamily: FONTS.bodyBold,
-                    fontSize: 12,
-                    color: COLORS.bg,
+                    fontSize: rf(12),
+                    color: "#fff",
                   }}
                 >
                   Upgrade ✨
@@ -1348,74 +1059,132 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Cosmic attributes */}
-        {kundli && (
+        {/* ── Cosmic Identity ────────────────────────────────────────────────── */}
+        {kundli && gc && (
           <View
             style={{
-              marginHorizontal: SPACING.xl,
+              marginHorizontal: rp(20),
               backgroundColor: COLORS.bgCard,
               borderRadius: RADIUS.xl,
               borderWidth: 1,
-              borderColor: COLORS.border,
-              padding: SPACING.lg,
-              marginBottom: SPACING.lg,
+              borderColor: gc.color + "40",
+              padding: rp(18),
+              marginBottom: rp(16),
             }}
           >
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 10,
+                fontSize: rf(10),
                 color: COLORS.textDim,
                 letterSpacing: 3,
-                marginBottom: SPACING.md,
+                marginBottom: rp(14),
               }}
             >
-              COSMIC ATTRIBUTES
+              COSMIC IDENTITY
             </Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+            {/* Nakshatra banner */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: rs(12),
+                backgroundColor: gc.bg,
+                borderRadius: RADIUS.lg,
+                padding: rp(14),
+                marginBottom: rp(14),
+                borderWidth: 1,
+                borderColor: gc.color + "30",
+              }}
+            >
+              <Text style={{ fontSize: rf(40) }}>
+                {kundli.nakshatraSymbol || "🌟"}
+              </Text>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontFamily: FONTS.headingBold,
+                    fontSize: rf(20),
+                    color: COLORS.textPrimary,
+                  }}
+                >
+                  {kundli.nakshatra}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: rf(12),
+                    color: COLORS.textSecondary,
+                    marginTop: 2,
+                  }}
+                >
+                  {kundli.rashi} Moon · Pada {kundli.pada}
+                </Text>
+              </View>
+              <View style={{ alignItems: "center" }}>
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: rf(9),
+                    color: COLORS.textDim,
+                    letterSpacing: 2,
+                  }}
+                >
+                  LORD
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyBold,
+                    fontSize: rf(14),
+                    color: COLORS.gold,
+                  }}
+                >
+                  {kundli.lordPlanet}
+                </Text>
+              </View>
+            </View>
+            {/* Attribute chips */}
+            <View
+              style={{ flexDirection: "row", flexWrap: "wrap", gap: rs(8) }}
+            >
               {[
-                { emoji: "🐾", label: "Yoni Animal", value: kundli.animal },
+                { emoji: "🐾", label: "Yoni", value: kundli.animal },
                 { emoji: "🌊", label: "Nadi", value: kundli.nadi },
                 { emoji: "📿", label: "Varna", value: kundli.varna },
                 { emoji: "💫", label: "Vashya", value: kundli.vashya },
-                { emoji: "🪐", label: "Lord Planet", value: kundli.lordPlanet },
-                {
-                  emoji: "🌙",
-                  label: "Moon °",
-                  value: `${kundli.moonLongitude?.toFixed(1)}°`,
-                },
-              ].map((item, i) => (
+              ].map((a) => (
                 <View
-                  key={i}
+                  key={a.label}
                   style={{
-                    width: "33.33%",
+                    flexDirection: "row",
                     alignItems: "center",
-                    paddingVertical: SPACING.sm,
+                    gap: rs(5),
+                    backgroundColor: COLORS.bgElevated,
+                    borderRadius: RADIUS.full,
+                    paddingHorizontal: rp(10),
+                    paddingVertical: rp(6),
+                    borderWidth: 1,
+                    borderColor: COLORS.border,
                   }}
                 >
-                  <Text style={{ fontSize: 18, marginBottom: 3 }}>
-                    {item.emoji}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: FONTS.bodyBold,
-                      fontSize: 13,
-                      color: COLORS.textPrimary,
-                      textAlign: "center",
-                    }}
-                  >
-                    {item.value}
-                  </Text>
+                  <Text style={{ fontSize: rf(13) }}>{a.emoji}</Text>
                   <Text
                     style={{
                       fontFamily: FONTS.body,
-                      fontSize: 10,
+                      fontSize: rf(11),
                       color: COLORS.textDim,
-                      textAlign: "center",
-                      marginTop: 2,
                     }}
                   >
-                    {item.label}
+                    {a.label}:
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: rf(12),
+                      color: COLORS.textPrimary,
+                    }}
+                  >
+                    {a.value || "—"}
                   </Text>
                 </View>
               ))}
@@ -1423,124 +1192,199 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Koota weights */}
-        <View
-          style={{
-            marginHorizontal: SPACING.xl,
-            backgroundColor: COLORS.bgCard,
-            borderRadius: RADIUS.xl,
-            borderWidth: 1,
-            borderColor: COLORS.border,
-            padding: SPACING.lg,
-            marginBottom: SPACING.lg,
-          }}
-        >
-          <Text
-            style={{
-              fontFamily: FONTS.body,
-              fontSize: 10,
-              color: COLORS.textDim,
-              letterSpacing: 3,
-              marginBottom: 4,
-            }}
-          >
-            ASHTA KOOTA WEIGHTS
-          </Text>
-          <Text
-            style={{
-              fontFamily: FONTS.body,
-              fontSize: 12,
-              color: COLORS.textSecondary,
-              marginBottom: SPACING.md,
-            }}
-          >
-            Maximum points each koota can contribute
-          </Text>
-          {KOOTA_INFO.map((k, idx) => (
-            <View
-              key={k.key}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: SPACING.sm,
-                paddingVertical: SPACING.sm,
-                borderBottomWidth: idx < KOOTA_INFO.length - 1 ? 1 : 0,
-                borderBottomColor: COLORS.border,
-              }}
-            >
-              <Text style={{ fontSize: 14, width: 20 }}>{k.emoji}</Text>
-              <View style={{ flex: 1 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginBottom: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: FONTS.bodyMedium,
-                      fontSize: 12,
-                      color: COLORS.textPrimary,
-                      width: 88,
-                    }}
-                  >
-                    {k.name}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: FONTS.body,
-                      fontSize: 11,
-                      color: COLORS.textSecondary,
-                      flex: 1,
-                    }}
-                  >
-                    {k.desc}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: FONTS.bodyBold,
-                      fontSize: 11,
-                      color: COLORS.gold,
-                    }}
-                  >
-                    {k.max} pts
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    height: 3,
-                    backgroundColor: COLORS.border,
-                    borderRadius: 2,
-                    overflow: "hidden",
-                  }}
-                >
-                  <View
-                    style={{
-                      height: 3,
-                      width: `${(k.max / 8) * 100}%`,
-                      backgroundColor: COLORS.gold,
-                      opacity: 0.25 + (k.max / 8) * 0.75,
-                      borderRadius: 2,
-                    }}
-                  />
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Preferences */}
-        {user.preferences && (
+        {/* ── MY ASHTA KOOTA ATTRIBUTES — rich cards ──────────────────────── */}
+        {kundli && (
           <View
             style={{
-              marginHorizontal: SPACING.xl,
+              marginHorizontal: rp(20),
               backgroundColor: COLORS.bgCard,
               borderRadius: RADIUS.xl,
               borderWidth: 1,
               borderColor: COLORS.border,
-              padding: SPACING.lg,
-              marginBottom: SPACING.lg,
+              padding: rp(18),
+              marginBottom: rp(16),
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: rf(10),
+                color: COLORS.textDim,
+                letterSpacing: 3,
+                marginBottom: rp(4),
+              }}
+            >
+              MY ASHTA KOOTA ATTRIBUTES
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: rf(12),
+                color: COLORS.textSecondary,
+                marginBottom: rp(14),
+                lineHeight: rf(18),
+              }}
+            >
+              Your personal cosmic values — used to compute compatibility with
+              matches. The "max pts" shown is the maximum that Koota contributes
+              in any match.
+            </Text>
+
+            <View style={{ gap: rp(10) }}>
+              {OWN_KOOTA_INFO.map((k) => {
+                const myValue =
+                  k.field === "nadi"
+                    ? kundli.nadi
+                    : k.field === "gana"
+                    ? kundli.gana
+                    : k.field === "animal"
+                    ? kundli.animal
+                    : k.field === "vashya"
+                    ? kundli.vashya
+                    : k.field === "varna"
+                    ? kundli.varna
+                    : "—";
+                const accent = getKootaColor(k.colorKey);
+
+                return (
+                  <View
+                    key={k.key}
+                    style={{
+                      backgroundColor: accent + "08",
+                      borderRadius: RADIUS.lg,
+                      padding: rp(14),
+                      borderWidth: 1,
+                      borderColor: accent + "30",
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: rp(6),
+                      }}
+                    >
+                      <Text style={{ fontSize: rf(20), marginRight: rs(10) }}>
+                        {k.emoji}
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: FONTS.bodyMedium,
+                          fontSize: rf(15),
+                          color: COLORS.textPrimary,
+                          flex: 1,
+                        }}
+                      >
+                        {k.name}
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: rs(8),
+                        }}
+                      >
+                        <View
+                          style={{
+                            backgroundColor: accent + "20",
+                            borderRadius: RADIUS.full,
+                            paddingHorizontal: rp(10),
+                            paddingVertical: rp(4),
+                            borderWidth: 1,
+                            borderColor: accent + "50",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: FONTS.bodyBold,
+                              fontSize: rf(13),
+                              color: accent,
+                            }}
+                          >
+                            {myValue}
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            fontFamily: FONTS.body,
+                            fontSize: rf(11),
+                            color: COLORS.textDim,
+                          }}
+                        >
+                          max {k.maxPts}pts
+                        </Text>
+                      </View>
+                    </View>
+                    <Text
+                      style={{
+                        fontFamily: FONTS.body,
+                        fontSize: rf(12),
+                        color: COLORS.textSecondary,
+                        marginBottom: rp(4),
+                      }}
+                    >
+                      {k.desc}
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: FONTS.body,
+                        fontSize: rf(11),
+                        color: COLORS.textDim,
+                        fontStyle: "italic",
+                        lineHeight: rf(16),
+                      }}
+                    >
+                      {k.why}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            <View
+              style={{
+                marginTop: rp(14),
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                backgroundColor: COLORS.bgElevated,
+                borderRadius: RADIUS.md,
+                padding: rp(12),
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: rf(13),
+                  color: COLORS.textSecondary,
+                }}
+              >
+                Total matching weight
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FONTS.headingBold,
+                  fontSize: rf(18),
+                  color: COLORS.gold,
+                }}
+              >
+                36 points
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Preferences ───────────────────────────────────────────────────── */}
+        {user.preferences && (
+          <View
+            style={{
+              marginHorizontal: rp(20),
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+              padding: rp(18),
+              marginBottom: rp(16),
             }}
           >
             <View
@@ -1548,13 +1392,13 @@ export default function ProfileScreen() {
                 flexDirection: "row",
                 justifyContent: "space-between",
                 alignItems: "center",
-                marginBottom: SPACING.md,
+                marginBottom: rp(14),
               }}
             >
               <Text
                 style={{
                   fontFamily: FONTS.body,
-                  fontSize: 10,
+                  fontSize: rf(10),
                   color: COLORS.textDim,
                   letterSpacing: 3,
                 }}
@@ -1564,8 +1408,8 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 onPress={() => setEditPrefs(true)}
                 style={{
-                  paddingHorizontal: SPACING.sm,
-                  paddingVertical: 4,
+                  paddingHorizontal: rp(10),
+                  paddingVertical: rp(4),
                   borderRadius: RADIUS.sm,
                   borderWidth: 1,
                   borderColor: COLORS.gold,
@@ -1574,7 +1418,7 @@ export default function ProfileScreen() {
                 <Text
                   style={{
                     fontFamily: FONTS.bodyMedium,
-                    fontSize: 11,
+                    fontSize: rf(11),
                     color: COLORS.gold,
                   }}
                 >
@@ -1594,6 +1438,15 @@ export default function ProfileScreen() {
                     ? "Any"
                     : `${user.preferences.minGunaScore}+ / 36`,
               },
+              {
+                label: "Show me",
+                value:
+                  user.preferences.genderPref === "male"
+                    ? "Men"
+                    : user.preferences.genderPref === "female"
+                    ? "Women"
+                    : "Both",
+              },
               { label: "Looking for", value: user.lookingFor || "both" },
             ].map((row) => (
               <View
@@ -1601,7 +1454,7 @@ export default function ProfileScreen() {
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
-                  paddingVertical: SPACING.sm,
+                  paddingVertical: rp(10),
                   borderBottomWidth: 1,
                   borderBottomColor: COLORS.border,
                 }}
@@ -1609,7 +1462,7 @@ export default function ProfileScreen() {
                 <Text
                   style={{
                     fontFamily: FONTS.body,
-                    fontSize: 14,
+                    fontSize: rf(14),
                     color: COLORS.textSecondary,
                   }}
                 >
@@ -1618,7 +1471,7 @@ export default function ProfileScreen() {
                 <Text
                   style={{
                     fontFamily: FONTS.bodyMedium,
-                    fontSize: 14,
+                    fontSize: rf(14),
                     color: COLORS.textPrimary,
                   }}
                 >
@@ -1629,41 +1482,37 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Settings — Notifications + Theme toggle */}
+        {/* ── Settings ──────────────────────────────────────────────────────── */}
         <View
           style={{
-            marginHorizontal: SPACING.xl,
+            marginHorizontal: rp(20),
             backgroundColor: COLORS.bgCard,
             borderRadius: RADIUS.xl,
             borderWidth: 1,
             borderColor: COLORS.border,
-            padding: SPACING.lg,
-            marginBottom: SPACING.lg,
+            padding: rp(18),
+            marginBottom: rp(16),
           }}
         >
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 10,
+              fontSize: rf(10),
               color: COLORS.textDim,
               letterSpacing: 3,
-              marginBottom: SPACING.md,
+              marginBottom: rp(10),
             }}
           >
             SETTINGS
           </Text>
-
-          {/* Theme toggle */}
           <ThemeToggle
             style={{
               borderBottomWidth: 1,
               borderBottomColor: COLORS.border,
-              paddingBottom: SPACING.md,
-              marginBottom: 4,
+              paddingBottom: rp(12),
+              marginBottom: rp(4),
             }}
           />
-
-          {/* Notifications */}
           {[
             {
               label: "New matches",
@@ -1689,7 +1538,7 @@ export default function ProfileScreen() {
               style={{
                 flexDirection: "row",
                 justifyContent: "space-between",
-                paddingVertical: SPACING.sm,
+                paddingVertical: rp(10),
                 borderBottomWidth: 1,
                 borderBottomColor: COLORS.border,
               }}
@@ -1698,7 +1547,7 @@ export default function ProfileScreen() {
                 <Text
                   style={{
                     fontFamily: FONTS.body,
-                    fontSize: 14,
+                    fontSize: rf(14),
                     color: COLORS.textSecondary,
                   }}
                 >
@@ -1707,9 +1556,9 @@ export default function ProfileScreen() {
                 <Text
                   style={{
                     fontFamily: FONTS.body,
-                    fontSize: 11,
+                    fontSize: rf(11),
                     color: COLORS.textDim,
-                    marginTop: 1,
+                    marginTop: rp(1),
                   }}
                 >
                   {row.sub}
@@ -1725,25 +1574,25 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        {/* Account */}
+        {/* ── Account ──────────────────────────────────────────────────────── */}
         <View
           style={{
-            marginHorizontal: SPACING.xl,
+            marginHorizontal: rp(20),
             backgroundColor: COLORS.bgCard,
             borderRadius: RADIUS.xl,
             borderWidth: 1,
             borderColor: COLORS.border,
-            padding: SPACING.lg,
-            marginBottom: SPACING.lg,
+            padding: rp(18),
+            marginBottom: rp(16),
           }}
         >
           <Text
             style={{
               fontFamily: FONTS.body,
-              fontSize: 10,
+              fontSize: rf(10),
               color: COLORS.textDim,
               letterSpacing: 3,
-              marginBottom: SPACING.sm,
+              marginBottom: rp(10),
             }}
           >
             ACCOUNT
@@ -1752,7 +1601,7 @@ export default function ProfileScreen() {
             style={{
               flexDirection: "row",
               justifyContent: "space-between",
-              paddingVertical: SPACING.sm,
+              paddingVertical: rp(10),
               borderBottomWidth: 1,
               borderBottomColor: COLORS.border,
             }}
@@ -1762,19 +1611,19 @@ export default function ProfileScreen() {
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: 14,
+                fontSize: rf(14),
                 color: COLORS.rose,
               }}
             >
               {loggingOut ? "Signing out..." : "Sign Out"}
             </Text>
-            <Text style={{ color: COLORS.rose, fontSize: 18 }}>›</Text>
+            <Text style={{ color: COLORS.rose, fontSize: rf(18) }}>›</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={{
               flexDirection: "row",
               justifyContent: "space-between",
-              paddingVertical: SPACING.sm,
+              paddingVertical: rp(10),
             }}
             onPress={() =>
               Alert.alert(
@@ -1787,7 +1636,7 @@ export default function ProfileScreen() {
               <Text
                 style={{
                   fontFamily: FONTS.body,
-                  fontSize: 14,
+                  fontSize: rf(14),
                   color: COLORS.rose,
                 }}
               >
@@ -1796,30 +1645,30 @@ export default function ProfileScreen() {
               <Text
                 style={{
                   fontFamily: FONTS.body,
-                  fontSize: 11,
+                  fontSize: rf(11),
                   color: COLORS.textDim,
-                  marginTop: 1,
+                  marginTop: rp(1),
                 }}
               >
                 This action is permanent
               </Text>
             </View>
-            <Text style={{ color: COLORS.rose, fontSize: 18 }}>›</Text>
+            <Text style={{ color: COLORS.rose, fontSize: rf(18) }}>›</Text>
           </TouchableOpacity>
         </View>
 
         <Text
           style={{
             fontFamily: FONTS.body,
-            fontSize: 11,
+            fontSize: rf(11),
             color: COLORS.textDim,
             textAlign: "center",
-            marginTop: 8,
+            marginTop: rp(8),
           }}
         >
-          VedicFind · v1.3
+          VedicFind · v1.4
         </Text>
-        <View style={{ height: 48 }} />
+        <View style={{ height: rp(48) }} />
       </ScrollView>
 
       <PaywallModal
@@ -1830,18 +1679,6 @@ export default function ProfileScreen() {
         }}
         triggerReason="default"
       />
-      {user && (
-        <EditProfileModal
-          visible={editProfile}
-          user={user}
-          onClose={() => setEditProfile(false)}
-          onSaved={(u) => {
-            dispatch(updateUser(u));
-            setEditProfile(false);
-            Alert.alert("✅ Saved", "Profile updated!");
-          }}
-        />
-      )}
       {user && (
         <EditPrefsModal
           visible={editPrefs}
