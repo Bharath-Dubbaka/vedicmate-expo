@@ -48,11 +48,13 @@ import {
 } from "../../../services/socket";
 import { useTheme } from "../../../context/ThemeContext";
 import BlockReportModal from "../../../components/BlockReportModal";
+import CosmicMatchSheet from "../../../components/CosmicMatchSheet";
 import { matchingAPI } from "../../../services/api";
 import { rf, rs, rp } from "../../../constants/responsive";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
+// ── RESTORED: desc field on each koota ───────────────────────────────────────
 const KOOTA_LIST = [
   {
     key: "nadi",
@@ -106,9 +108,7 @@ const KOOTA_LIST = [
   },
 ];
 
-// ── Full screen photo viewer ──────────────────────────────────────────────────
 function PhotoViewer({ visible, photoUri, onClose }) {
-  const { COLORS } = useTheme();
   return (
     <Modal
       visible={visible}
@@ -150,11 +150,11 @@ function PhotoViewer({ visible, photoUri, onClose }) {
   );
 }
 
-// ── Profile + Compat modal ────────────────────────────────────────────────────
 function ProfileModal({ visible, matchInfo, onClose }) {
   const { COLORS, FONTS, RADIUS, VERDICT_CONFIG, GANA_CONFIG } = useTheme();
   const [activeTab, setActiveTab] = useState("compat");
   const [compatData, setCompatData] = useState(null);
+  const [theirKundli, setTheirKundli] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPhoto, setShowPhoto] = useState(false);
 
@@ -165,9 +165,14 @@ function ProfileModal({ visible, matchInfo, onClose }) {
         .getCompatibility(matchInfo.userId)
         .then((res) => {
           if (res.data?.compatibility) setCompatData(res.data.compatibility);
+          if (res.data?.them?.kundli) setTheirKundli(res.data.them.kundli);
         })
-        .catch((err) => console.warn("[CHAT] Compat fetch:", err.message))
+        .catch((err) => console.warn("[CHAT] compat fetch:", err.message))
         .finally(() => setLoading(false));
+    }
+    if (!visible) {
+      setCompatData(null);
+      setTheirKundli(null);
     }
   }, [visible, matchInfo?.userId]);
 
@@ -181,33 +186,79 @@ function ProfileModal({ visible, matchInfo, onClose }) {
     : null;
   const pct = compatData ? Math.round((compatData.totalScore / 36) * 100) : 0;
 
-  // Build their cosmic attributes from cosmicCard stored in matchInfo
-  const cosmicCard = matchInfo?.cosmicCard || {};
-  const gc = cosmicCard.gana
-    ? GANA_CONFIG[cosmicCard.gana] || GANA_CONFIG.Manushya
+  const kundli = theirKundli || matchInfo?.cosmicCard || {};
+  const gc = kundli.gana
+    ? GANA_CONFIG[kundli.gana] || GANA_CONFIG.Manushya
     : null;
 
   const theirAttributes = [
     {
       emoji: "🌟",
       label: "Nakshatra",
-      value: cosmicCard.nakshatra || matchInfo?.nakshatra || "—",
+      desc: "Birth star",
+      why: "The root of all 8 Koota calculations.",
+      value: kundli.nakshatra || "—",
     },
-    { emoji: "🌙", label: "Moon Sign", value: cosmicCard.rashi || "—" },
+    {
+      emoji: "🌙",
+      label: "Moon Sign",
+      desc: "Rashi — lunar position",
+      why: "Used for Bhakoot Koota (7pts). Certain Rashi combos are Bhakoot dosha.",
+      value: kundli.rashi || "—",
+    },
     {
       emoji: "🔢",
       label: "Pada",
-      value: cosmicCard.pada ? `Pada ${cosmicCard.pada}` : "—",
+      desc: "Quarter of Nakshatra",
+      why: "Refines the Nakshatra position within a 3°20′ arc.",
+      value: kundli.pada ? `Pada ${kundli.pada}` : "—",
     },
-    { emoji: "✨", label: "Gana", value: cosmicCard.gana || "—" },
-    { emoji: "🐾", label: "Yoni Animal", value: cosmicCard.animal || "—" },
-    { emoji: "🌊", label: "Nadi", value: cosmicCard.nadi || "—" },
-    { emoji: "📿", label: "Varna", value: cosmicCard.varna || "—" },
-    { emoji: "💫", label: "Vashya", value: cosmicCard.vashya || "—" },
-    { emoji: "🪐", label: "Lord Planet", value: cosmicCard.lordPlanet || "—" },
+    {
+      emoji: "✨",
+      label: "Gana",
+      desc: "Soul temperament — Deva / Manushya / Rakshasa",
+      why: "Used for Gana Koota (6pts). Deva + Rakshasa = 0.",
+      value: kundli.gana || "—",
+    },
+    {
+      emoji: "🐾",
+      label: "Yoni Animal",
+      desc: "Symbolic spirit animal",
+      why: "Used for Yoni Koota (4pts). Friend animals = 4, enemies = 0.",
+      value: kundli.animal || "—",
+    },
+    {
+      emoji: "🌊",
+      label: "Nadi",
+      desc: "Body constitution — Vata / Pitta / Kapha",
+      why: "Used for Nadi Koota (8pts) — the highest weight. Same Nadi = 0.",
+      value: kundli.nadi || "—",
+    },
+    {
+      emoji: "📿",
+      label: "Varna",
+      desc: "Spiritual class",
+      why: "Used for Varna Koota (1pt). Groom Varna ≥ Bride Varna = 1pt.",
+      value: kundli.varna || "—",
+    },
+    {
+      emoji: "💫",
+      label: "Vashya",
+      desc: "Magnetic influence type",
+      why: "Used for Vashya Koota (2pts). Measures natural attraction sphere.",
+      value: kundli.vashya || "—",
+    },
+    {
+      emoji: "🪐",
+      label: "Lord Planet",
+      desc: "Ruling planet of Nakshatra",
+      why: "Used for Graha Maitri Koota (5pts). Lord planet friendship determines score.",
+      value: kundli.lordPlanet || "—",
+    },
   ];
 
-  const hasAnyData = theirAttributes.some((a) => a.value !== "—");
+  const allPopulated =
+    theirAttributes.filter((a) => a.value !== "—").length >= 6;
 
   return (
     <>
@@ -241,8 +292,6 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                 ←
               </Text>
             </TouchableOpacity>
-
-            {/* Clickable avatar */}
             <TouchableOpacity
               onPress={() => setShowPhoto(true)}
               style={{ marginHorizontal: rs(10) }}
@@ -280,7 +329,6 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                 )}
               </View>
             </TouchableOpacity>
-
             <View style={{ flex: 1 }}>
               <Text
                 style={{
@@ -291,7 +339,7 @@ function ProfileModal({ visible, matchInfo, onClose }) {
               >
                 {matchInfo?.name || "Profile"}
               </Text>
-              {cosmicCard.nakshatra || matchInfo?.nakshatra ? (
+              {kundli.nakshatra ? (
                 <Text
                   style={{
                     fontFamily: FONTS.body,
@@ -299,7 +347,17 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                     color: COLORS.gold,
                   }}
                 >
-                  ✦ {cosmicCard.nakshatra || matchInfo?.nakshatra}
+                  ✦ {kundli.nakshatra}
+                </Text>
+              ) : matchInfo?.nakshatra ? (
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: rf(12),
+                    color: COLORS.gold,
+                  }}
+                >
+                  ✦ {matchInfo.nakshatra}
                 </Text>
               ) : null}
             </View>
@@ -384,6 +442,7 @@ function ProfileModal({ visible, matchInfo, onClose }) {
               {/* ── TAB 1: COMPATIBILITY ──────────────────────────────────── */}
               {activeTab === "compat" && (
                 <>
+                  {/* RESTORED: explanatory info box */}
                   <View
                     style={{
                       backgroundColor: COLORS.bgElevated,
@@ -474,7 +533,6 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                           {compatData.totalScore}/36 Gunas
                         </Text>
                       </View>
-
                       <View
                         style={{
                           height: rs(5),
@@ -493,7 +551,6 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                           }}
                         />
                       </View>
-
                       <Text
                         style={{
                           fontFamily: FONTS.body,
@@ -519,7 +576,6 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                           const entry = compatData.breakdown?.[k.key];
                           const score = entry?.score ?? 0;
                           const maxVal = entry?.max ?? k.max;
-                          const detail = entry?.detail ?? "";
                           const isPerfect = score === maxVal;
                           const isZero = score === 0;
                           const barColor = isPerfect
@@ -558,7 +614,8 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                                       justifyContent: "space-between",
                                     }}
                                   >
-                                    <View>
+                                    {/* RESTORED: name + desc subtitle stacked */}
+                                    <View style={{ flex: 1 }}>
                                       <Text
                                         style={{
                                           fontFamily: FONTS.bodyMedium,
@@ -613,7 +670,7 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                                   }}
                                 />
                               </View>
-                              {detail ? (
+                              {entry?.detail ? (
                                 <Text
                                   style={{
                                     fontFamily: FONTS.body,
@@ -624,14 +681,13 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                                     fontStyle: "italic",
                                   }}
                                 >
-                                  {detail}
+                                  {entry.detail}
                                 </Text>
                               ) : null}
                             </View>
                           );
                         })}
                       </View>
-
                       {compatData.doshas?.length > 0 && (
                         <>
                           <Text
@@ -723,7 +779,7 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                           textAlign: "center",
                         }}
                       >
-                        Compatibility data not available
+                        Could not load compatibility data
                       </Text>
                     </View>
                   )}
@@ -766,7 +822,67 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                     </Text>
                   </View>
 
-                  {/* Clickable photo */}
+                  {/* Nakshatra + Rashi + Pada + Deity banner */}
+                  {(kundli.nakshatra || kundli.rashi) && (
+                    <View
+                      style={{
+                        backgroundColor: gc?.bg || COLORS.bgElevated,
+                        borderRadius: RADIUS.xl,
+                        borderWidth: 1.5,
+                        borderColor: gc?.color
+                          ? gc.color + "50"
+                          : COLORS.border,
+                        padding: rp(18),
+                        marginBottom: rp(14),
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: rs(14),
+                        }}
+                      >
+                        <Text style={{ fontSize: rf(40) }}>🌟</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              fontFamily: FONTS.headingBold,
+                              fontSize: rf(20),
+                              color: COLORS.textPrimary,
+                            }}
+                          >
+                            {kundli.nakshatra || "—"}
+                          </Text>
+                          <Text
+                            style={{
+                              fontFamily: FONTS.bodyMedium,
+                              fontSize: rf(14),
+                              color: gc?.color || COLORS.gold,
+                              marginTop: rp(3),
+                            }}
+                          >
+                            {kundli.rashi ? `${kundli.rashi} Moon` : ""}
+                            {kundli.pada ? `  ·  Pada ${kundli.pada}` : ""}
+                          </Text>
+                          {kundli.deity || kundli.god ? (
+                            <Text
+                              style={{
+                                fontFamily: FONTS.body,
+                                fontSize: rf(12),
+                                color: COLORS.textSecondary,
+                                marginTop: rp(3),
+                              }}
+                            >
+                              🙏 {kundli.deity || kundli.god}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* RESTORED: clickable photo thumbnail */}
                   {matchInfo?.photo && (
                     <TouchableOpacity
                       onPress={() => setShowPhoto(true)}
@@ -808,7 +924,7 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                   )}
 
                   {/* Gana hero */}
-                  {gc && (
+                  {gc && kundli.gana && (
                     <View
                       style={{
                         backgroundColor: gc.bg,
@@ -835,7 +951,7 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                               color: COLORS.textPrimary,
                             }}
                           >
-                            {cosmicCard.gana} Gana
+                            {kundli.gana} Gana
                           </Text>
                           <Text
                             style={{
@@ -851,7 +967,41 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                     </View>
                   )}
 
-                  {/* All attributes */}
+                  {/* Their Chart explanation */}
+                  <View
+                    style={{
+                      backgroundColor: COLORS.bgElevated,
+                      borderRadius: RADIUS.md,
+                      padding: rp(12),
+                      marginBottom: rp(14),
+                      borderWidth: 1,
+                      borderColor: COLORS.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: FONTS.body,
+                        fontSize: rf(12),
+                        color: COLORS.textSecondary,
+                        lineHeight: rf(18),
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: FONTS.bodyBold,
+                          color: COLORS.textPrimary,
+                        }}
+                      >
+                        Their Chart
+                      </Text>{" "}
+                      shows {matchInfo?.name}'s fixed cosmic fingerprint — their
+                      Nakshatra, Rashi, Gana, Nadi and other attributes derived
+                      at birth. These values were used to compute your Guna
+                      Milan score in the Compatibility tab.
+                    </Text>
+                  </View>
+
+                  {/* All attributes table */}
                   <Text
                     style={{
                       fontFamily: FONTS.body,
@@ -879,32 +1029,62 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                         <View
                           key={attr.label}
                           style={{
-                            flexDirection: "row",
-                            alignItems: "center",
                             paddingHorizontal: rp(16),
-                            paddingVertical: rp(12),
+                            paddingVertical: rp(14),
                             borderBottomWidth:
                               idx < theirAttributes.length - 1 ? 1 : 0,
                             borderBottomColor: COLORS.border,
+                            flexDirection: "row",
+                            alignItems: "flex-start",
                           }}
                         >
-                          <Text style={{ fontSize: rf(18), width: rs(28) }}>
-                            {attr.emoji}
-                          </Text>
                           <Text
                             style={{
-                              fontFamily: FONTS.body,
-                              fontSize: rf(13),
-                              color: COLORS.textSecondary,
-                              flex: 1,
+                              fontSize: rf(18),
+                              width: rs(28),
+                              marginTop: rp(2),
                             }}
                           >
-                            {attr.label}
+                            {attr.emoji}
                           </Text>
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{
+                                fontFamily: FONTS.bodyMedium,
+                                fontSize: rf(13),
+                                color: COLORS.textPrimary,
+                              }}
+                            >
+                              {attr.label}
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: FONTS.body,
+                                fontSize: rf(11),
+                                color: COLORS.textDim,
+                                marginTop: rp(1),
+                              }}
+                            >
+                              {attr.desc}
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: FONTS.body,
+                                fontSize: rf(11),
+                                color: COLORS.textSecondary,
+                                fontStyle: "italic",
+                                marginTop: rp(3),
+                                lineHeight: rf(16),
+                              }}
+                            >
+                              {attr.why}
+                            </Text>
+                          </View>
                           <Text
                             style={{
                               fontFamily: FONTS.bodyBold,
                               fontSize: rf(14),
+                              marginTop: rp(2),
                               color: hasValue
                                 ? COLORS.textPrimary
                                 : COLORS.textDim,
@@ -917,7 +1097,7 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                     })}
                   </View>
 
-                  {!hasAnyData && (
+                  {!allPopulated && (
                     <View
                       style={{
                         backgroundColor: COLORS.bgElevated,
@@ -936,10 +1116,9 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                           textAlign: "center",
                         }}
                       >
-                        💡 This match was made before the full data was stored.
-                        The compatibility calculation in Tab 1 was correctly
-                        computed at matching time. New matches will show all
-                        attributes here.
+                        💡 Some fields unavailable — this match was made before
+                        the full data was stored. The compatibility in Tab 1 was
+                        correctly computed at matching time.
                       </Text>
                     </View>
                   )}
@@ -951,8 +1130,6 @@ function ProfileModal({ visible, matchInfo, onClose }) {
           )}
         </View>
       </Modal>
-
-      {/* Full screen photo viewer */}
       <PhotoViewer
         visible={showPhoto}
         photoUri={matchInfo?.photo}
@@ -990,8 +1167,6 @@ export default function ChatScreen() {
       (m) => m.matchId?.toString() === matchId?.toString()
     );
     if (match) {
-      // Pass the full cosmicCard — populated from fetchMatches backend response
-      // OR from addMatch with full cosmicCard (fixed in matchesSlice + discover)
       setMatchInfo({
         name: match.user?.name,
         age: match.user?.age,
@@ -1102,9 +1277,7 @@ export default function ChatScreen() {
             }}
           >
             <Text style={{ fontSize: rf(14) }}>
-              {matchInfo?.cosmicCard?.nakshatra?.split(" ")[0] ||
-                matchInfo?.nakshatra?.split(" ")[0] ||
-                "🌟"}
+              {matchInfo?.nakshatra?.split(" ")[0] || "🌟"}
             </Text>
           </View>
         )}
@@ -1156,7 +1329,6 @@ export default function ChatScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
-      {/* Header */}
       <View
         style={{
           flexDirection: "row",
@@ -1221,7 +1393,6 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Messages */}
       {chatLoading ? (
         <View
           style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
@@ -1332,7 +1503,6 @@ export default function ChatScreen() {
         />
       )}
 
-      {/* Input */}
       <View
         style={{
           flexDirection: "row",

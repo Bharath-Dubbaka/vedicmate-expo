@@ -11,6 +11,11 @@
 // Informative — user spends time reading, not just swiping
 // ─────────────────────────────────────────────────────────────────────────────
 
+// UPDATED: Cosmic Identity — big Nakshatra banner, Rashi Moon, Deity/God, Pada
+// UPDATED: Lord Planet + Gana as large icon cards side by side
+// UPDATED: Ashta Koota cards bigger — more padding, taller bars, larger fonts
+// RESTORED: TOP STRENGTHS highlights, cycling koota colors, VERDICT_BG tints
+
 import { useEffect, useRef, useCallback, useState } from "react";
 import {
   View,
@@ -44,7 +49,7 @@ import BrandHeader from "../../components/BrandHeader";
 import CosmicMatchSheet from "../../components/CosmicMatchSheet";
 import { rf, rs, rp } from "../../constants/responsive";
 
-const { width, height } = Dimensions.get("window");
+const { width: W, height: H } = Dimensions.get("window");
 
 const KOOTA_LIST = [
   { key: "nadi", name: "Nadi", emoji: "🌊", max: 8 },
@@ -64,32 +69,43 @@ const VERDICT_BG = {
   "Challenging Match": "#F8717118",
 };
 
-function ProfilePage({ profile }) {
+// ── Full Screen Profile ───────────────────────────────────────────────────────
+function ProfilePage({ profile, onLike, onPass }) {
   const { COLORS, FONTS, RADIUS, VERDICT_CONFIG, GANA_CONFIG } = useTheme();
   const vc =
     VERDICT_CONFIG[profile.compatibility.verdict] ||
     VERDICT_CONFIG["Average Match"];
   const gc = GANA_CONFIG[profile.user.cosmicCard.gana] || GANA_CONFIG.Manushya;
   const pct = Math.round((profile.compatibility.totalScore / 36) * 100);
+  const hasPhoto = !!profile.user.photos?.[0];
+  const cc = profile.user.cosmicCard;
 
-  const KOOTA_COLORS = [
-    COLORS.gold,
-    COLORS.deva || "#A78BFA",
-    COLORS.manushya || "#60A5FA",
-    COLORS.teal || "#4ECDC4",
-  ];
+  // deity — backend may use either key
+  const deity = cc.deity || cc.god || null;
+
+  // cycling koota colors
+  const getKootaColor = (idx, isPerfect, isZero) => {
+    if (isPerfect) return COLORS.gold;
+    if (isZero) return COLORS.rose;
+    const cycle = [
+      COLORS.gold,
+      COLORS.deva || "#A78BFA",
+      COLORS.manushya || "#60A5FA",
+      COLORS.teal || "#4ECDC4",
+    ];
+    return cycle[idx % cycle.length];
+  };
 
   return (
     <ScrollView
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: COLORS.bg }}
       contentContainerStyle={{ paddingBottom: rp(120) }}
       showsVerticalScrollIndicator={false}
+      bounces={false}
     >
-      {/* Photo */}
-      <View
-        style={{ width: "100%", height: height * 0.5, backgroundColor: gc.bg }}
-      >
-        {profile.user.photos?.[0] ? (
+      {/* ── FULL SCREEN PHOTO ──────────────────────────────────────────────── */}
+      <View style={{ width: W, height: H * 0.72, position: "relative" }}>
+        {hasPhoto ? (
           <Image
             source={{ uri: profile.user.photos[0] }}
             style={{ width: "100%", height: "100%" }}
@@ -99,318 +115,523 @@ function ProfilePage({ profile }) {
           <View
             style={{
               flex: 1,
+              backgroundColor: gc.bg,
               alignItems: "center",
               justifyContent: "center",
-              gap: rs(8),
             }}
           >
-            <Text style={{ fontSize: rf(80), opacity: 0.2 }}>👤</Text>
-            <Text
+            <View
               style={{
-                fontFamily: FONTS.body,
-                fontSize: rf(14),
-                color: COLORS.textDim,
+                width: rs(120),
+                height: rs(120),
+                borderRadius: rs(60),
+                backgroundColor: gc.color + "30",
+                borderWidth: 2,
+                borderColor: gc.color + "60",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: rp(16),
               }}
             >
-              No photo added
+              <Text
+                style={{
+                  fontFamily: FONTS.headingBold,
+                  fontSize: rf(48),
+                  color: gc.color,
+                }}
+              >
+                {profile.user.name?.[0]?.toUpperCase()}
+              </Text>
+            </View>
+            <Text
+              style={{
+                fontFamily: FONTS.bodyMedium,
+                fontSize: rf(16),
+                color: COLORS.textSecondary,
+              }}
+            >
+              No photo added yet
             </Text>
           </View>
         )}
-      </View>
 
-      {/* Name + Bio */}
-      <View
-        style={{
-          paddingHorizontal: rp(20),
-          paddingTop: rp(18),
-          paddingBottom: rp(16),
-          borderBottomWidth: 1,
-          borderBottomColor: COLORS.border,
-        }}
-      >
+        {/* Bottom overlay — name + gana + nakshatra */}
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            marginBottom: rp(8),
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            paddingHorizontal: rp(20),
+            paddingBottom: rp(90),
+            paddingTop: rp(80),
           }}
         >
-          <View style={{ flex: 1, marginRight: rs(12) }}>
-            <Text
-              style={{
-                fontFamily: FONTS.headingBold,
-                fontSize: rf(28),
-                color: COLORS.textPrimary,
-                lineHeight: rf(34),
-              }}
-            >
-              {profile.user.name}
-            </Text>
-            <Text
-              style={{
-                fontFamily: FONTS.body,
-                fontSize: rf(15),
-                color: COLORS.textSecondary,
-                marginTop: rp(2),
-              }}
-            >
-              {profile.user.age} years old
-              {profile.user.gender ? ` · ${profile.user.gender}` : ""}
-            </Text>
-          </View>
           <View
             style={{
               flexDirection: "row",
-              alignItems: "center",
-              gap: rs(5),
-              paddingHorizontal: rp(12),
-              paddingVertical: rp(6),
-              borderRadius: RADIUS.full,
-              backgroundColor: gc.bg,
-              borderWidth: 1.5,
-              borderColor: gc.color + "60",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+              marginBottom: rp(8),
             }}
           >
-            <Text style={{ fontSize: rf(14) }}>{gc.emoji}</Text>
-            <Text
+            <View style={{ flex: 1, marginRight: rs(12) }}>
+              <Text
+                style={{
+                  fontFamily: FONTS.headingBold,
+                  fontSize: rf(30),
+                  color: hasPhoto ? "#fff" : COLORS.textPrimary,
+                  textShadowColor: hasPhoto ? "rgba(0,0,0,0.8)" : "transparent",
+                  textShadowOffset: { width: 0, height: 1 },
+                  textShadowRadius: 4,
+                }}
+              >
+                {profile.user.name}, {profile.user.age}
+              </Text>
+              {profile.user.lookingFor && (
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: rf(13),
+                    color: hasPhoto
+                      ? "rgba(255,255,255,0.85)"
+                      : COLORS.textSecondary,
+                    marginTop: rp(2),
+                  }}
+                >
+                  {profile.user.lookingFor === "marriage" ? "💍" : "💕"} Looking
+                  for {profile.user.lookingFor}
+                </Text>
+              )}
+            </View>
+            <View
               style={{
-                fontFamily: FONTS.bodyMedium,
-                fontSize: rf(12),
-                color: gc.color,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: rs(5),
+                paddingHorizontal: rp(12),
+                paddingVertical: rp(6),
+                borderRadius: RADIUS.full,
+                backgroundColor: gc.color + "30",
+                borderWidth: 1.5,
+                borderColor: gc.color + "70",
               }}
             >
-              {profile.user.cosmicCard.gana}
-            </Text>
+              <Text style={{ fontSize: rf(16) }}>{gc.emoji}</Text>
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: rf(12),
+                  color: gc.color,
+                }}
+              >
+                {cc.gana}
+              </Text>
+            </View>
           </View>
-        </View>
-        {profile.user.bio ? (
-          <Text
-            style={{
-              fontFamily: FONTS.body,
-              fontSize: rf(14),
-              color: COLORS.textSecondary,
-              lineHeight: rf(22),
-            }}
-          >
-            {profile.user.bio}
-          </Text>
-        ) : null}
-        {profile.user.lookingFor ? (
           <View
             style={{
+              alignSelf: "flex-start",
               flexDirection: "row",
               alignItems: "center",
               gap: rs(6),
-              marginTop: rp(10),
+              backgroundColor: hasPhoto ? "rgba(255,255,255,0.15)" : gc.bg,
+              borderRadius: RADIUS.full,
+              paddingHorizontal: rp(12),
+              paddingVertical: rp(5),
+              borderWidth: 1,
+              borderColor: hasPhoto ? "rgba(255,255,255,0.3)" : gc.color + "40",
             }}
           >
-            <Text style={{ fontSize: rf(14) }}>
-              {profile.user.lookingFor === "marriage"
-                ? "💍"
-                : profile.user.lookingFor === "dating"
-                ? "💕"
-                : "✨"}
-            </Text>
+            <Text style={{ fontSize: rf(12) }}>✦</Text>
             <Text
               style={{
                 fontFamily: FONTS.bodyMedium,
                 fontSize: rf(13),
-                color: COLORS.textSecondary,
+                color: hasPhoto ? "#fff" : gc.color,
               }}
             >
-              Looking for {profile.user.lookingFor}
+              {cc.nakshatra}
             </Text>
+            {cc.rashi && (
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: rf(11),
+                  color: hasPhoto
+                    ? "rgba(255,255,255,0.7)"
+                    : COLORS.textSecondary,
+                }}
+              >
+                · {cc.rashi} Moon
+              </Text>
+            )}
           </View>
-        ) : null}
-      </View>
+        </View>
 
-      {/* Cosmic Identity */}
-      <View
-        style={{
-          paddingHorizontal: rp(20),
-          paddingTop: rp(18),
-          paddingBottom: rp(18),
-          borderBottomWidth: 1,
-          borderBottomColor: COLORS.border,
-        }}
-      >
-        <Text
+        {/* Floating action buttons */}
+        <View
           style={{
-            fontFamily: FONTS.body,
-            fontSize: rf(10),
-            color: COLORS.textDim,
-            letterSpacing: 3,
-            marginBottom: rp(12),
+            position: "absolute",
+            bottom: -rs(30),
+            left: 0,
+            right: 0,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: rs(20),
           }}
         >
-          COSMIC IDENTITY
-        </Text>
-        <View
-          style={{ flexDirection: "row", gap: rp(12), marginBottom: rp(12) }}
-        >
-          <View
+          <TouchableOpacity
             style={{
-              flex: 1,
-              backgroundColor: gc.bg,
-              borderRadius: RADIUS.lg,
-              borderWidth: 1,
-              borderColor: gc.color + "40",
-              padding: rp(14),
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: FONTS.bodyBold,
-                fontSize: rf(17),
-                color: COLORS.textPrimary,
-                marginBottom: rp(2),
-              }}
-            >
-              {profile.user.cosmicCard.nakshatra}
-            </Text>
-            <Text
-              style={{
-                fontFamily: FONTS.body,
-                fontSize: rf(12),
-                color: COLORS.textSecondary,
-              }}
-            >
-              {profile.user.cosmicCard.rashi} Moon · Pada{" "}
-              {profile.user.cosmicCard.pada}
-            </Text>
-          </View>
-          <View
-            style={{
-              width: rs(82),
-              backgroundColor: COLORS.bgElevated,
-              borderRadius: RADIUS.lg,
-              borderWidth: 1,
-              borderColor: COLORS.border,
-              padding: rp(12),
+              width: rs(62),
+              height: rs(62),
+              borderRadius: rs(28),
+              backgroundColor: COLORS.bg,
               alignItems: "center",
               justifyContent: "center",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.25,
+              shadowRadius: 10,
+              elevation: 12,
+              borderWidth: 2,
+              borderColor: COLORS.rose,
+            }}
+            onPress={onPass}
+            activeOpacity={0.85}
+          >
+            <Text style={{ fontSize: rf(24) }}>✕</Text>
+          </TouchableOpacity>
+          <View
+            style={{
+              paddingHorizontal: rp(24),
+              paddingVertical: rp(24),
+              backgroundColor: COLORS.gold,
+              borderRadius: RADIUS.full,
+              borderWidth: 2,
+              borderColor: vc.color,
+              shadowColor: vc.color,
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.4,
+              shadowRadius: 10,
+              elevation: 10,
             }}
           >
-            <Text style={{ fontSize: rf(22), marginBottom: rp(4) }}>🪐</Text>
             <Text
               style={{
-                fontFamily: FONTS.bodyBold,
-                fontSize: rf(13),
-                color: COLORS.gold,
+                fontFamily: FONTS.headingBold,
+                fontSize: rf(18),
+                color: COLORS.textPrimary,
                 textAlign: "center",
               }}
             >
-              {profile.user.cosmicCard.lordPlanet}
+              {pct}%
             </Text>
             <Text
               style={{
                 fontFamily: FONTS.body,
                 fontSize: rf(10),
-                color: COLORS.textDim,
-                marginTop: 2,
+                color: COLORS.textPrimary,
+                textAlign: "center",
+                letterSpacing: 0.5,
               }}
             >
-              Lord
+              {profile.compatibility.totalScore}/36
             </Text>
           </View>
+          <TouchableOpacity
+            style={{
+              width: rs(62),
+              height: rs(62),
+              borderRadius: rs(28),
+              backgroundColor: COLORS.gold,
+              alignItems: "center",
+              justifyContent: "center",
+              shadowColor: COLORS.gold,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.6,
+              shadowRadius: 12,
+              elevation: 14,
+              borderWidth: 2,
+              borderColor: COLORS.gold,
+            }}
+            onPress={onLike}
+            activeOpacity={0.85}
+          >
+            <Text style={{ fontSize: rf(24) }}>✦</Text>
+          </TouchableOpacity>
         </View>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: rs(8) }}>
-          {[
-            {
-              emoji: "🐾",
-              label: "Yoni",
-              value: profile.user.cosmicCard.animal,
-            },
-            { emoji: "🌊", label: "Nadi", value: profile.user.cosmicCard.nadi },
-            {
-              emoji: "📿",
-              label: "Varna",
-              value: profile.user.cosmicCard.varna,
-            },
-            {
-              emoji: "💫",
-              label: "Vashya",
-              value: profile.user.cosmicCard.vashya,
-            },
-          ].map((a) => (
+      </View>
+
+      {/* ── INFO CARDS ──────────────────────────────────────────────────────── */}
+      <View style={{ paddingTop: rp(48), paddingHorizontal: rp(20) }}>
+        {/* Bio */}
+        {profile.user.bio ? (
+          <View
+            style={{
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              padding: rp(16),
+              marginBottom: rp(16),
+              borderWidth: 1,
+              borderColor: COLORS.border,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: rf(14),
+                color: COLORS.textSecondary,
+                lineHeight: rf(22),
+              }}
+            >
+              {profile.user.bio}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* ── EXPANDED COSMIC IDENTITY ──────────────────────────────────────── */}
+        <View
+          style={{
+            backgroundColor: COLORS.bgCard,
+            borderRadius: RADIUS.xl,
+            padding: rp(18),
+            marginBottom: rp(16),
+            borderWidth: 1,
+            borderColor: gc.color + "30",
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: rf(10),
+              color: COLORS.textDim,
+              letterSpacing: 3,
+              marginBottom: rp(16),
+            }}
+          >
+            COSMIC IDENTITY
+          </Text>
+
+          {/* Big Nakshatra banner with Rashi + Pada + Deity */}
+          <View
+            style={{
+              backgroundColor: gc.bg,
+              borderRadius: RADIUS.xl,
+              borderWidth: 1.5,
+              borderColor: gc.color + "50",
+              padding: rp(18),
+              marginBottom: rp(14),
+            }}
+          >
             <View
-              key={a.label}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                gap: rs(5),
-                backgroundColor: COLORS.bgElevated,
-                borderRadius: RADIUS.full,
-                paddingHorizontal: rp(10),
-                paddingVertical: rp(5),
-                borderWidth: 1,
-                borderColor: COLORS.border,
+                gap: rs(14),
               }}
             >
-              <Text style={{ fontSize: rf(12) }}>{a.emoji}</Text>
+              <Text style={{ fontSize: rf(44) }}>
+                {cc.nakshatraSymbol || "🌟"}
+              </Text>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontFamily: FONTS.headingBold,
+                    fontSize: rf(22),
+                    color: COLORS.textPrimary,
+                  }}
+                >
+                  {cc.nakshatra}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyMedium,
+                    fontSize: rf(15),
+                    color: gc.color,
+                    marginTop: rp(3),
+                  }}
+                >
+                  {cc.rashi ? `${cc.rashi} Moon` : ""}
+                  {cc.pada ? `  ·  Pada ${cc.pada}` : ""}
+                </Text>
+                {deity ? (
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: rf(13),
+                      color: COLORS.textSecondary,
+                      marginTop: rp(4),
+                    }}
+                  >
+                    🙏 {deity}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </View>
+
+          {/* Lord Planet + Gana side-by-side */}
+          <View
+            style={{ flexDirection: "row", gap: rs(10), marginBottom: rp(14) }}
+          >
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: COLORS.bgElevated,
+                borderRadius: RADIUS.lg,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                padding: rp(14),
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: rf(26), marginBottom: rp(5) }}>🪐</Text>
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyBold,
+                  fontSize: rf(16),
+                  color: COLORS.gold,
+                  textAlign: "center",
+                }}
+              >
+                {cc.lordPlanet || "—"}
+              </Text>
               <Text
                 style={{
                   fontFamily: FONTS.body,
                   fontSize: rf(11),
                   color: COLORS.textDim,
+                  marginTop: rp(3),
                 }}
               >
-                {a.label}:
+                Lord Planet
+              </Text>
+            </View>
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: gc.bg,
+                borderRadius: RADIUS.lg,
+                borderWidth: 1,
+                borderColor: gc.color + "50",
+                padding: rp(14),
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: rf(26), marginBottom: rp(5) }}>
+                {gc.emoji}
               </Text>
               <Text
                 style={{
-                  fontFamily: FONTS.bodyMedium,
-                  fontSize: rf(11),
-                  color: COLORS.textPrimary,
+                  fontFamily: FONTS.bodyBold,
+                  fontSize: rf(16),
+                  color: gc.color,
+                  textAlign: "center",
                 }}
               >
-                {a.value || "—"}
+                {cc.gana}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: rf(11),
+                  color: COLORS.textDim,
+                  marginTop: rp(3),
+                }}
+              >
+                Gana
               </Text>
             </View>
-          ))}
-        </View>
-      </View>
+          </View>
 
-      {/* Compatibility Score */}
-      <View
-        style={{
-          paddingHorizontal: rp(20),
-          paddingTop: rp(18),
-          paddingBottom: rp(18),
-          borderBottomWidth: 1,
-          borderBottomColor: COLORS.border,
-        }}
-      >
-        <Text
-          style={{
-            fontFamily: FONTS.body,
-            fontSize: rf(10),
-            color: COLORS.textDim,
-            letterSpacing: 3,
-            marginBottom: rp(14),
-          }}
-        >
-          COMPATIBILITY
-        </Text>
+          {/* Attribute chips — larger */}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: rs(10) }}>
+            {[
+              { emoji: "🐾", label: "Yoni", value: cc.animal },
+              { emoji: "🌊", label: "Nadi", value: cc.nadi },
+              { emoji: "📿", label: "Varna", value: cc.varna },
+              { emoji: "💫", label: "Vashya", value: cc.vashya },
+            ]
+              .filter((a) => a.value)
+              .map((a) => (
+                <View
+                  key={a.label}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: rs(6),
+                    backgroundColor: COLORS.bgElevated,
+                    borderRadius: RADIUS.full,
+                    paddingHorizontal: rp(14),
+                    paddingVertical: rp(9),
+                    borderWidth: 1,
+                    borderColor: COLORS.border,
+                  }}
+                >
+                  <Text style={{ fontSize: rf(15) }}>{a.emoji}</Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: rf(12),
+                      color: COLORS.textDim,
+                    }}
+                  >
+                    {a.label}:
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: rf(13),
+                      color: COLORS.textPrimary,
+                    }}
+                  >
+                    {a.value}
+                  </Text>
+                </View>
+              ))}
+          </View>
+        </View>
+
+        {/* ── Compatibility hero with VERDICT_BG tint ───────────────────────── */}
         <View
           style={{
             backgroundColor:
-              VERDICT_BG[profile.compatibility.verdict] || COLORS.bgElevated,
+              VERDICT_BG[profile.compatibility.verdict] || COLORS.bgCard,
             borderRadius: RADIUS.xl,
-            padding: rp(18),
-            borderWidth: 1,
+            padding: rp(20),
+            marginBottom: rp(16),
+            borderWidth: 1.5,
             borderColor: vc.color + "40",
           }}
         >
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: rf(10),
+              color: COLORS.textDim,
+              letterSpacing: 3,
+              marginBottom: rp(14),
+            }}
+          >
+            COMPATIBILITY
+          </Text>
           <View
-            style={{ flexDirection: "row", alignItems: "center", gap: rs(16) }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: rs(16),
+              marginBottom: rp(14),
+            }}
           >
             <View
               style={{
-                width: rs(72),
-                height: rs(72),
-                borderRadius: rs(36),
+                width: rs(68),
+                height: rs(68),
+                borderRadius: rs(34),
                 borderWidth: 2.5,
                 borderColor: vc.color,
                 backgroundColor: COLORS.bgCard,
@@ -421,7 +642,7 @@ function ProfilePage({ profile }) {
               <Text
                 style={{
                   fontFamily: FONTS.headingBold,
-                  fontSize: rf(20),
+                  fontSize: rf(19),
                   color: vc.color,
                 }}
               >
@@ -432,9 +653,9 @@ function ProfilePage({ profile }) {
               <Text
                 style={{
                   fontFamily: FONTS.bodyBold,
-                  fontSize: rf(18),
+                  fontSize: rf(19),
                   color: vc.color,
-                  marginBottom: rp(2),
+                  marginBottom: rp(3),
                 }}
               >
                 {vc.emoji} {profile.compatibility.verdict}
@@ -442,7 +663,7 @@ function ProfilePage({ profile }) {
               <Text
                 style={{
                   fontFamily: FONTS.body,
-                  fontSize: rf(13),
+                  fontSize: rf(14),
                   color: COLORS.textSecondary,
                 }}
               >
@@ -452,212 +673,235 @@ function ProfilePage({ profile }) {
           </View>
           <View
             style={{
-              height: rs(4),
+              height: rs(6),
               backgroundColor: COLORS.border,
-              borderRadius: 2,
+              borderRadius: 3,
               overflow: "hidden",
-              marginTop: rp(14),
             }}
           >
             <View
               style={{
-                height: rs(4),
+                height: rs(6),
                 width: `${pct}%`,
                 backgroundColor: vc.color,
-                borderRadius: 2,
+                borderRadius: 3,
               }}
             />
           </View>
         </View>
-      </View>
 
-      {/* Ashta Koota */}
-      <View
-        style={{
-          paddingHorizontal: rp(20),
-          paddingTop: rp(18),
-          paddingBottom: rp(4),
-        }}
-      >
+        {/* Guna Milan explanation */}
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
+            backgroundColor: COLORS.bgElevated,
+            borderRadius: RADIUS.xl,
+            padding: rp(16),
             marginBottom: rp(14),
+            borderWidth: 1,
+            borderColor: COLORS.border,
           }}
         >
           <Text
             style={{
-              fontFamily: FONTS.body,
-              fontSize: rf(10),
-              color: COLORS.textDim,
-              letterSpacing: 3,
+              fontFamily: FONTS.bodyBold,
+              fontSize: rf(13),
+              color: COLORS.textPrimary,
+              marginBottom: rp(6),
             }}
           >
-            ASHTA KOOTA BREAKDOWN
+            📜 What is Guna Milan?
           </Text>
           <Text
             style={{
-              fontFamily: FONTS.bodyBold,
-              fontSize: rf(14),
+              fontFamily: FONTS.body,
+              fontSize: rf(12),
               color: COLORS.textSecondary,
+              lineHeight: rf(19),
             }}
           >
-            {profile.compatibility.totalScore}/36
+            <Text
+              style={{ fontFamily: FONTS.bodyBold, color: COLORS.textPrimary }}
+            >
+              Ashtakoota Milan
+            </Text>{" "}
+            is the Vedic compatibility system used for thousands of years. Your
+            birth Nakshatra determines 8 cosmic attributes (Kootas). Each Koota
+            is compared between two people to produce a score out of 36 Gunas.
+            {"\n\n"}
+            <Text
+              style={{ fontFamily: FONTS.bodyBold, color: COLORS.textPrimary }}
+            >
+              This score
+            </Text>{" "}
+            is a pairwise calculation — it changes with every person you view.{" "}
+            <Text
+              style={{ fontFamily: FONTS.bodyBold, color: COLORS.textPrimary }}
+            >
+              Their Chart
+            </Text>{" "}
+            (after matching) shows their fixed individual attributes used in
+            this calculation.
           </Text>
         </View>
-        <View style={{ gap: rp(8) }}>
-          {KOOTA_LIST.map((k, idx) => {
-            const entry = profile.compatibility.breakdown?.[k.key];
-            const score = entry?.score ?? 0;
-            const maxVal = entry?.max ?? k.max;
-            const detail = entry?.detail ?? "";
-            const isPerfect = score === maxVal;
-            const isZero = score === 0;
-            const barColor = isPerfect
-              ? COLORS.gold
-              : isZero
-              ? COLORS.rose
-              : KOOTA_COLORS[idx % KOOTA_COLORS.length];
 
-            function KOOTA_COLORS(i) {
-              const colors = [
-                COLORS.gold,
-                COLORS.deva || "#A78BFA",
-                COLORS.manushya || "#60A5FA",
-                COLORS.teal || "#4ECDC4",
-              ];
-              return colors[i % colors.length];
-            }
-
-            return (
-              <View
-                key={k.key}
-                style={{
-                  backgroundColor: COLORS.bgCard,
-                  borderRadius: RADIUS.lg,
-                  padding: rp(14),
-                  borderWidth: 1,
-                  borderColor: isPerfect
-                    ? COLORS.gold + "40"
-                    : isZero
-                    ? COLORS.rose + "30"
-                    : COLORS.border,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginBottom: rp(8),
-                  }}
-                >
-                  <Text style={{ fontSize: rf(18), marginRight: rs(10) }}>
-                    {k.emoji}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: FONTS.bodyMedium,
-                      fontSize: rf(14),
-                      color: COLORS.textPrimary,
-                      flex: 1,
-                    }}
-                  >
-                    {k.name}
-                  </Text>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: rs(4),
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontFamily: FONTS.headingBold,
-                        fontSize: rf(16),
-                        color: barColor,
-                      }}
-                    >
-                      {score}
-                    </Text>
-                    <Text
-                      style={{
-                        fontFamily: FONTS.body,
-                        fontSize: rf(12),
-                        color: COLORS.textDim,
-                      }}
-                    >
-                      /{maxVal}
-                    </Text>
-                    {isPerfect && <Text style={{ fontSize: rf(12) }}>✓</Text>}
-                    {isZero && <Text style={{ fontSize: rf(12) }}>✕</Text>}
-                  </View>
-                </View>
-                <View
-                  style={{
-                    height: rs(5),
-                    backgroundColor: COLORS.bgElevated,
-                    borderRadius: 3,
-                    overflow: "hidden",
-                    marginBottom: detail ? rp(8) : 0,
-                  }}
-                >
-                  <View
-                    style={{
-                      height: rs(5),
-                      width: `${(score / maxVal) * 100}%`,
-                      backgroundColor: barColor,
-                      borderRadius: 3,
-                    }}
-                  />
-                </View>
-                {detail ? (
-                  <Text
-                    style={{
-                      fontFamily: FONTS.body,
-                      fontSize: rf(11),
-                      color: COLORS.textSecondary,
-                      lineHeight: rf(16),
-                    }}
-                  >
-                    {detail}
-                  </Text>
-                ) : null}
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Doshas */}
-        {profile.compatibility.doshas?.length > 0 && (
-          <View style={{ marginTop: rp(16) }}>
+        {/* ── EXPANDED Ashta Koota with cycling colors ──────────────────────── */}
+        <View
+          style={{
+            backgroundColor: COLORS.bgCard,
+            borderRadius: RADIUS.xl,
+            padding: rp(18),
+            marginBottom: rp(16),
+            borderWidth: 1,
+            borderColor: COLORS.border,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: rp(16),
+            }}
+          >
             <Text
               style={{
                 fontFamily: FONTS.body,
                 fontSize: rf(10),
                 color: COLORS.textDim,
                 letterSpacing: 3,
-                marginBottom: rp(10),
+              }}
+            >
+              ASHTA KOOTA BREAKDOWN
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.bodyBold,
+                fontSize: rf(14),
+                color: COLORS.textSecondary,
+              }}
+            >
+              {profile.compatibility.totalScore}/36
+            </Text>
+          </View>
+          <View style={{ gap: rp(12) }}>
+            {KOOTA_LIST.map((k, idx) => {
+              const entry = profile.compatibility.breakdown?.[k.key];
+              const score = entry?.score ?? 0;
+              const maxVal = entry?.max ?? k.max;
+              const detail = entry?.detail ?? "";
+              const isPerfect = score === maxVal;
+              const isZero = score === 0;
+              const barColor = getKootaColor(idx, isPerfect, isZero);
+              return (
+                <View
+                  key={k.key}
+                  style={{
+                    backgroundColor: COLORS.bgElevated,
+                    borderRadius: RADIUS.lg,
+                    padding: rp(14),
+                    borderWidth: 1,
+                    borderColor: isPerfect
+                      ? COLORS.gold + "40"
+                      : isZero
+                      ? COLORS.rose + "30"
+                      : COLORS.border,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      marginBottom: rp(10),
+                    }}
+                  >
+                    <Text style={{ fontSize: rf(18), marginRight: rs(10) }}>
+                      {k.emoji}
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: FONTS.bodyMedium,
+                        fontSize: rf(14),
+                        color: COLORS.textPrimary,
+                        flex: 1,
+                      }}
+                    >
+                      {k.name}
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: FONTS.bodyBold,
+                        fontSize: rf(15),
+                        color: barColor,
+                      }}
+                    >
+                      {score}/{maxVal}
+                      {isPerfect ? " ✓" : isZero ? " ✕" : ""}
+                    </Text>
+                  </View>
+                  {/* Taller bar — 7px */}
+                  <View
+                    style={{
+                      height: rs(7),
+                      backgroundColor: COLORS.border,
+                      borderRadius: 4,
+                      overflow: "hidden",
+                      marginBottom: detail ? rp(8) : 0,
+                    }}
+                  >
+                    <View
+                      style={{
+                        height: rs(7),
+                        width: `${(score / maxVal) * 100}%`,
+                        backgroundColor: barColor,
+                        borderRadius: 4,
+                      }}
+                    />
+                  </View>
+                  {detail ? (
+                    <Text
+                      style={{
+                        fontFamily: FONTS.body,
+                        fontSize: rf(12),
+                        color: COLORS.textSecondary,
+                        fontStyle: "italic",
+                        lineHeight: rf(17),
+                      }}
+                    >
+                      {detail}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Doshas */}
+        {profile.compatibility.doshas?.length > 0 && (
+          <View
+            style={{
+              backgroundColor: "#FF980008",
+              borderRadius: RADIUS.xl,
+              padding: rp(18),
+              marginBottom: rp(16),
+              borderWidth: 1,
+              borderColor: "#FF980030",
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: rf(10),
+                color: COLORS.textDim,
+                letterSpacing: 3,
+                marginBottom: rp(12),
               }}
             >
               DOSHAS
             </Text>
-            <View style={{ gap: rp(8) }}>
+            <View style={{ gap: rp(10) }}>
               {profile.compatibility.doshas.map((d, i) => (
-                <View
-                  key={i}
-                  style={{
-                    backgroundColor: "#FF980010",
-                    borderRadius: RADIUS.md,
-                    borderWidth: 1,
-                    borderColor: "#FF980030",
-                    padding: rp(12),
-                    flexDirection: "row",
-                    gap: rs(10),
-                  }}
-                >
+                <View key={i} style={{ flexDirection: "row", gap: rs(10) }}>
                   <Text style={{ fontSize: rf(16) }}>
                     {d.severity === "high" ? "⚠️" : "ℹ️"}
                   </Text>
@@ -665,7 +909,7 @@ function ProfilePage({ profile }) {
                     <Text
                       style={{
                         fontFamily: FONTS.bodyMedium,
-                        fontSize: rf(13),
+                        fontSize: rf(14),
                         color: COLORS.textPrimary,
                         marginBottom: rp(2),
                       }}
@@ -675,9 +919,9 @@ function ProfilePage({ profile }) {
                     <Text
                       style={{
                         fontFamily: FONTS.body,
-                        fontSize: rf(12),
+                        fontSize: rf(13),
                         color: COLORS.textSecondary,
-                        lineHeight: rf(18),
+                        lineHeight: rf(19),
                       }}
                     >
                       {d.description}
@@ -686,7 +930,7 @@ function ProfilePage({ profile }) {
                       <Text
                         style={{
                           fontFamily: FONTS.body,
-                          fontSize: rf(11),
+                          fontSize: rf(12),
                           color: COLORS.good || "#4ADE80",
                           marginTop: rp(4),
                         }}
@@ -701,22 +945,22 @@ function ProfilePage({ profile }) {
           </View>
         )}
 
-        {/* Highlights */}
+        {/* TOP STRENGTHS */}
         {profile.compatibility.highlights?.length > 0 && (
-          <View style={{ marginTop: rp(16), marginBottom: rp(8) }}>
+          <View style={{ marginBottom: rp(16) }}>
             <Text
               style={{
                 fontFamily: FONTS.body,
                 fontSize: rf(10),
                 color: COLORS.textDim,
                 letterSpacing: 3,
-                marginBottom: rp(10),
+                marginBottom: rp(12),
               }}
             >
               TOP STRENGTHS
             </Text>
             <View
-              style={{ flexDirection: "row", flexWrap: "wrap", gap: rp(10) }}
+              style={{ flexDirection: "row", flexWrap: "wrap", gap: rp(12) }}
             >
               {profile.compatibility.highlights.slice(0, 4).map((h) => (
                 <View
@@ -730,14 +974,14 @@ function ProfilePage({ profile }) {
                     borderWidth: 1,
                     borderColor:
                       h.score === h.max ? COLORS.gold + "50" : COLORS.border,
-                    padding: rp(12),
+                    padding: rp(16),
                     alignItems: "center",
                   }}
                 >
                   <Text
                     style={{
                       fontFamily: FONTS.headingBold,
-                      fontSize: rf(18),
+                      fontSize: rf(22),
                       color:
                         h.score === h.max ? COLORS.gold : COLORS.textSecondary,
                     }}
@@ -747,9 +991,9 @@ function ProfilePage({ profile }) {
                   <Text
                     style={{
                       fontFamily: FONTS.body,
-                      fontSize: rf(11),
+                      fontSize: rf(12),
                       color: COLORS.textDim,
-                      marginTop: 2,
+                      marginTop: rp(3),
                       textAlign: "center",
                     }}
                   >
@@ -765,6 +1009,7 @@ function ProfilePage({ profile }) {
   );
 }
 
+// ── Main Discover Screen ──────────────────────────────────────────────────────
 export default function DiscoverScreen() {
   const dispatch = useDispatch();
   const router = useRouter();
@@ -775,7 +1020,7 @@ export default function DiscoverScreen() {
   const swipeLimitReached = useSelector(selectSwipeLimitReached);
 
   const [showPaywall, setShowPaywall] = useState(false);
-  const [matchData, setMatchData] = useState(null); // drives CosmicMatchSheet
+  const [matchData, setMatchData] = useState(null);
   const { isPremium, swipesRemaining, swipesAllowed, decrementSwipe, refresh } =
     usePremium();
 
@@ -812,7 +1057,6 @@ export default function DiscoverScreen() {
       dispatch(removeProfile(profile.user.id));
       const result = await dispatch(likeProfile(profile.user.id));
       if (likeProfile.fulfilled.match(result) && result.payload.isMatch) {
-        // Store full cosmicCard in match
         dispatch(
           addMatch({
             matchId: result.payload.matchId,
@@ -841,7 +1085,6 @@ export default function DiscoverScreen() {
             },
           })
         );
-        // Show beautiful bottom sheet instead of Alert.alert
         setMatchData({
           name: profile.user.name,
           score: profile.compatibility.totalScore,
@@ -873,11 +1116,10 @@ export default function DiscoverScreen() {
       <BrandHeader
         title="DISCOVER"
         subtitle={
-          profiles.length > 0
-            ? `${profiles.length} profiles nearby`
-            : "Finding your cosmic matches"
+          profiles.length > 0 ? `${profiles.length} profiles nearby` : undefined
         }
         right={
+          !loading &&
           profiles.length > 0 && (
             <View
               style={{
@@ -985,119 +1227,18 @@ export default function DiscoverScreen() {
           <ActivityIndicator color={COLORS.gold} size="large" />
         </View>
       ) : (
-        <ProfilePage profile={currentProfile} />
+        <ProfilePage
+          profile={currentProfile}
+          onLike={() => handleLike(currentProfile)}
+          onPass={() => handlePass(currentProfile)}
+        />
       )}
 
-      {/* Fixed bottom buttons */}
-      {!loading && !isEmpty && profiles.length > 0 && (
-        <View
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            backgroundColor: COLORS.bg,
-            borderTopWidth: 1,
-            borderTopColor: COLORS.border,
-            paddingVertical: rp(14),
-            paddingHorizontal: rp(24),
-            paddingBottom: rp(24),
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: rp(12),
-          }}
-        >
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              paddingVertical: rp(14),
-              borderRadius: RADIUS.lg,
-              backgroundColor: COLORS.bgCard,
-              borderWidth: 2,
-              borderColor: COLORS.rose,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: rs(8),
-            }}
-            onPress={() => handlePass(currentProfile)}
-            activeOpacity={0.8}
-          >
-            <Text style={{ fontSize: rf(20) }}>✕</Text>
-            <Text
-              style={{
-                fontFamily: FONTS.bodyBold,
-                fontSize: rf(15),
-                color: COLORS.rose,
-              }}
-            >
-              Pass
-            </Text>
-          </TouchableOpacity>
-
-          <View style={{ alignItems: "center", minWidth: rs(48) }}>
-            <Text
-              style={{
-                fontFamily: FONTS.headingBold,
-                fontSize: rf(20),
-                color: COLORS.gold,
-              }}
-            >
-              {profiles.length}
-            </Text>
-            <Text
-              style={{
-                fontFamily: FONTS.body,
-                fontSize: rf(9),
-                color: COLORS.textDim,
-                letterSpacing: 1,
-              }}
-            >
-              LEFT
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              paddingVertical: rp(14),
-              borderRadius: RADIUS.lg,
-              backgroundColor: COLORS.gold,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: rs(8),
-              shadowColor: COLORS.gold,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.4,
-              shadowRadius: 10,
-              elevation: 8,
-            }}
-            onPress={() => handleLike(currentProfile)}
-            activeOpacity={0.8}
-          >
-            <Text style={{ fontSize: rf(20) }}>✦</Text>
-            <Text
-              style={{
-                fontFamily: FONTS.bodyBold,
-                fontSize: rf(15),
-                color: "#fff",
-              }}
-            >
-              Connect
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Beautiful match sheet */}
       <CosmicMatchSheet
         data={matchData}
         onClose={() => setMatchData(null)}
         onChat={(matchId) => router.push(`/(tabs)/chat/${matchId}`)}
       />
-
       <PaywallModal
         visible={showPaywall}
         onClose={() => {

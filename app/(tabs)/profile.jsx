@@ -2,6 +2,12 @@
 //
 // Profile screen with editable name, age, bio, and preferences.
 // Users can tap "Edit Profile" to update their basic info after signup.
+// FIXED: Name/username always visible regardless of photo
+// FIXED: Email shown in Account section
+// FIXED: Username/name editing restored
+// FIXED: Photo delete button restored
+// FIXED: "Show Me" locked (auto-set from gender, can't be changed)
+// FIXED: Edit Preferences has age range, min guna only (no gender preference)
 
 import { useState, useCallback } from "react";
 import {
@@ -33,7 +39,6 @@ import { rf, rs, rp } from "../../constants/responsive";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
-// Own Koota attribute cards — rich version with color + description + why it matters
 const OWN_KOOTA_INFO = [
   {
     key: "nadi",
@@ -43,7 +48,17 @@ const OWN_KOOTA_INFO = [
     maxPts: 8,
     colorKey: "gold",
     desc: "Body constitution — Vata / Pitta / Kapha",
-    why: "Highest weight (8pts). If both partners share same Nadi = 0 pts. Different Nadi = full 8.",
+    why: "Highest weight (8pts). Same Nadi = 0 pts in matching. Different Nadi = full 8.",
+  },
+  {
+    key: "bhakoot",
+    name: "Bhakoot",
+    emoji: "🌕",
+    field: "bhakoot",
+    maxPts: 7,
+    colorKey: "deva",
+    desc: "Moon sign relationship — emotional bond",
+    why: "Second highest (7pts). Certain Rashi combinations score 0 — this is a major dosha if mismatched.",
   },
   {
     key: "gana",
@@ -53,7 +68,17 @@ const OWN_KOOTA_INFO = [
     maxPts: 6,
     colorKey: "deva",
     desc: "Soul temperament — Deva / Manushya / Rakshasa",
-    why: "Same Gana or compatible pairs score 5-6 pts. Deva+Rakshasa = 0 pts.",
+    why: "Same Gana or compatible pairs score 5–6 pts. Deva + Rakshasa = 0.",
+  },
+  {
+    key: "grahaMaitri",
+    name: "Graha Maitri",
+    emoji: "🪐",
+    field: "lordPlanet",
+    maxPts: 5,
+    colorKey: "manushya",
+    desc: "Lord planet friendship — intellectual compatibility",
+    why: "Based on friendship between ruling planets of each Nakshatra. Best friends = 5pts, enemies = 0.",
   },
   {
     key: "yoni",
@@ -63,7 +88,17 @@ const OWN_KOOTA_INFO = [
     maxPts: 4,
     colorKey: "manushya",
     desc: "Symbolic spirit animal — physical compatibility",
-    why: "Friend animal pairs = 4 pts. Enemy pairs = 0. There are 14 yoni animals.",
+    why: "Friend animal pairs = 4 pts. Enemy pairs = 0. There are 14 Yoni animals.",
+  },
+  {
+    key: "tara",
+    name: "Tara",
+    emoji: "⭐",
+    field: "tara",
+    maxPts: 3,
+    colorKey: "teal",
+    desc: "Birth star harmony — health & fortune",
+    why: "Counted from your Nakshatra to theirs. Auspicious Taras = 3pts, inauspicious = 0.",
   },
   {
     key: "vashya",
@@ -87,34 +122,7 @@ const OWN_KOOTA_INFO = [
   },
 ];
 
-const GANA_DETAIL = {
-  Deva: {
-    color: "#A78BFA",
-    desc: "Naturally compassionate, spiritually inclined, harmonious.",
-  },
-  Manushya: {
-    color: "#60A5FA",
-    desc: "Balanced heart and mind. Practical, warm, loyal.",
-  },
-  Rakshasa: {
-    color: "#F87171",
-    desc: "Intense, independent, magnetic. Pairs best with Rakshasa.",
-  },
-};
-
-const NADI_DETAIL = {
-  Vata: { element: "Air", desc: "Quick mind, creative, adaptable." },
-  Pitta: { element: "Fire", desc: "Passionate, focused, driven." },
-  Kapha: { element: "Water", desc: "Calm, nurturing, steadfast." },
-  Antya: { element: "Water", desc: "Ending Nadi — pairs best with Aadi." },
-  Madhya: {
-    element: "Air",
-    desc: "Middle Nadi — pairs best with Antya or Aadi.",
-  },
-  Aadi: { element: "Fire", desc: "Beginning Nadi — pairs best with Madhya." },
-};
-
-// ── Bio inline editor ─────────────────────────────────────────────────────────
+// ── Inline bio editor ─────────────────────────────────────────────────────────
 function BioSection({ bio, onSaved }) {
   const { COLORS, FONTS, RADIUS } = useTheme();
   const [editing, setEditing] = useState(false);
@@ -265,22 +273,20 @@ function BioSection({ bio, onSaved }) {
 
 // ── Edit Preferences Modal ────────────────────────────────────────────────────
 function EditPrefsModal({ visible, user, onClose, onSaved }) {
-  const { COLORS, FONTS, SPACING, RADIUS } = useTheme();
+  const { COLORS, FONTS, RADIUS } = useTheme();
   const [minAge, setMinAge] = useState(user?.preferences?.minAge ?? 18);
   const [maxAge, setMaxAge] = useState(user?.preferences?.maxAge ?? 45);
   const [minGuna, setMinGuna] = useState(user?.preferences?.minGunaScore ?? 18);
-  const [genderPref, setGenderPref] = useState(
-    user?.preferences?.genderPref ?? "both"
-  );
   const [lookingFor, setLookingFor] = useState(user?.lookingFor ?? "both");
   const [saving, setSaving] = useState(false);
 
-  const GENDER_OPTIONS = [
-    { label: "Men", value: "male", emoji: "👨" },
-    { label: "Women", value: "female", emoji: "👩" },
-    { label: "Both", value: "both", emoji: "💫" },
-  ];
-  const LOOKING_OPTIONS = ["marriage", "dating", "both"];
+  // Show Me is derived from gender — cannot be changed
+  const showMe =
+    user?.gender === "male"
+      ? "Women"
+      : user?.gender === "female"
+      ? "Men"
+      : "Everyone";
 
   const handleSave = async () => {
     if (minAge > maxAge) {
@@ -289,7 +295,13 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
     }
     try {
       setSaving(true);
-      const prefs = { minAge, maxAge, minGunaScore: minGuna, genderPref };
+      const prefs = {
+        minAge,
+        maxAge,
+        minGunaScore: minGuna,
+        // Gender pref stays as-is — not editable
+        genderPref: user?.preferences?.genderPref,
+      };
       await onboardingAPI.saveProfile({
         gender: user.gender,
         preferences: prefs,
@@ -297,7 +309,7 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
       });
       onSaved({ preferences: prefs, lookingFor });
     } catch (err) {
-      Alert.alert("Error", err.message || "Failed to save preferences");
+      Alert.alert("Error", err.message || "Failed to save");
     } finally {
       setSaving(false);
     }
@@ -359,6 +371,79 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
         </View>
 
         <ScrollView contentContainerStyle={{ padding: rp(20) }}>
+          {/* Show Me — LOCKED */}
+          <View
+            style={{
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              padding: rp(18),
+              marginBottom: rp(16),
+              borderWidth: 1,
+              borderColor: COLORS.border,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: rf(10),
+                color: COLORS.textDim,
+                letterSpacing: 3,
+                marginBottom: rp(8),
+              }}
+            >
+              SHOW ME
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <View>
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyBold,
+                    fontSize: rf(16),
+                    color: COLORS.textPrimary,
+                  }}
+                >
+                  {showMe}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: rf(12),
+                    color: COLORS.textDim,
+                    marginTop: rp(2),
+                  }}
+                >
+                  Automatically set based on your gender
+                </Text>
+              </View>
+              <View
+                style={{
+                  paddingHorizontal: rp(10),
+                  paddingVertical: rp(5),
+                  backgroundColor: COLORS.bgElevated,
+                  borderRadius: RADIUS.md,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: rf(11),
+                    color: COLORS.textDim,
+                  }}
+                >
+                  🔒 Locked
+                </Text>
+              </View>
+            </View>
+          </View>
+
           {/* Age range */}
           <View
             style={{
@@ -476,12 +561,12 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
               }}
             >
               {minGuna <= 1
-                ? "⚠️ All profiles appear regardless of score"
+                ? "⚠️ All profiles appear"
                 : minGuna < 18
-                ? "⚠️ Low — many profiles will appear"
+                ? "⚠️ Low threshold"
                 : minGuna < 24
-                ? "✅ Balanced — good starting point"
-                : "🌟 High — only strong matches"}
+                ? "✅ Balanced"
+                : "🌟 High — strong matches only"}
             </Text>
             <Slider
               minimumValue={1}
@@ -493,67 +578,6 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
               maximumTrackTintColor={COLORS.border}
               thumbTintColor={COLORS.gold}
             />
-          </View>
-
-          {/* Show me */}
-          <View
-            style={{
-              backgroundColor: COLORS.bgCard,
-              borderRadius: RADIUS.xl,
-              padding: rp(18),
-              marginBottom: rp(16),
-              borderWidth: 1,
-              borderColor: COLORS.border,
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: FONTS.body,
-                fontSize: rf(10),
-                color: COLORS.textDim,
-                letterSpacing: 3,
-                marginBottom: rp(12),
-              }}
-            >
-              SHOW ME
-            </Text>
-            <View style={{ flexDirection: "row", gap: rp(10) }}>
-              {GENDER_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={{
-                    flex: 1,
-                    alignItems: "center",
-                    paddingVertical: rp(12),
-                    borderRadius: RADIUS.full,
-                    borderWidth: 1,
-                    borderColor:
-                      genderPref === opt.value ? COLORS.gold : COLORS.border,
-                    backgroundColor:
-                      genderPref === opt.value
-                        ? COLORS.gold + "15"
-                        : "transparent",
-                  }}
-                  onPress={() => setGenderPref(opt.value)}
-                >
-                  <Text style={{ fontSize: rf(20), marginBottom: rp(4) }}>
-                    {opt.emoji}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: FONTS.bodyMedium,
-                      fontSize: rf(13),
-                      color:
-                        genderPref === opt.value
-                          ? COLORS.gold
-                          : COLORS.textSecondary,
-                    }}
-                  >
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
           </View>
 
           {/* Looking for */}
@@ -579,7 +603,7 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
               LOOKING FOR
             </Text>
             <View style={{ flexDirection: "row", gap: rp(10) }}>
-              {LOOKING_OPTIONS.map((opt) => (
+              {["marriage", "dating", "both"].map((opt) => (
                 <TouchableOpacity
                   key={opt}
                   style={{
@@ -616,6 +640,139 @@ function EditPrefsModal({ visible, user, onClose, onSaved }) {
   );
 }
 
+// ── Edit Name Modal ────────────────────────────────────────────────────────────
+function EditNameModal({ visible, currentName, onClose, onSaved }) {
+  const { COLORS, FONTS, RADIUS } = useTheme();
+  const [value, setValue] = useState(currentName || "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === currentName) {
+      onClose();
+      return;
+    }
+    try {
+      setSaving(true);
+      await authAPI.updateMe({ name: trimmed });
+      onSaved(trimmed);
+    } catch (err) {
+      Alert.alert("Error", err.message || "Failed to update name");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: rp(24),
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: COLORS.bgCard,
+            borderRadius: RADIUS.xl,
+            padding: rp(24),
+            width: "100%",
+            borderWidth: 1,
+            borderColor: COLORS.border,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: FONTS.headingBold,
+              fontSize: rf(18),
+              color: COLORS.textPrimary,
+              marginBottom: rp(16),
+            }}
+          >
+            Edit Name
+          </Text>
+          <TextInput
+            style={{
+              backgroundColor: COLORS.bgElevated,
+              borderRadius: RADIUS.md,
+              borderWidth: 1,
+              borderColor: COLORS.gold,
+              padding: rp(12),
+              fontFamily: FONTS.body,
+              fontSize: rf(15),
+              color: COLORS.textPrimary,
+              marginBottom: rp(16),
+            }}
+            value={value}
+            onChangeText={setValue}
+            autoFocus
+            maxLength={50}
+            placeholderTextColor={COLORS.textDim}
+            placeholder="Your name"
+          />
+          <View style={{ flexDirection: "row", gap: rp(12) }}>
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                borderRadius: RADIUS.lg,
+                paddingVertical: rp(12),
+                alignItems: "center",
+              }}
+              onPress={onClose}
+            >
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyMedium,
+                  fontSize: rf(14),
+                  color: COLORS.textSecondary,
+                }}
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                backgroundColor: COLORS.gold,
+                borderRadius: RADIUS.lg,
+                paddingVertical: rp(12),
+                alignItems: "center",
+                opacity: saving ? 0.6 : 1,
+              }}
+              onPress={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyBold,
+                    fontSize: rf(14),
+                    color: "#fff",
+                  }}
+                >
+                  Save
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function ProfileScreen() {
   const dispatch = useDispatch();
   const user = useSelector(selectUser);
@@ -623,16 +780,16 @@ export default function ProfileScreen() {
 
   const [loggingOut, setLoggingOut] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [deletingPhoto, setDeletingPhoto] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [editPrefs, setEditPrefs] = useState(false);
+  const [editName, setEditName] = useState(false);
   const [notifMatch, setNotifMatch] = useState(true);
   const [notifMessage, setNotifMessage] = useState(true);
   const [notifLiked, setNotifLiked] = useState(true);
 
   const kundli = user?.kundli;
   const gc = kundli ? GANA_CONFIG[kundli.gana] || GANA_CONFIG.Manushya : null;
-  const gd = kundli ? GANA_DETAIL[kundli.gana] || GANA_DETAIL.Manushya : null;
-  const nd = kundli ? NADI_DETAIL[kundli.nadi] || null : null;
   const { isPremium, plan, expiresAt, refresh: refreshPremium } = usePremium();
 
   useFocusEffect(
@@ -640,6 +797,16 @@ export default function ProfileScreen() {
       refreshPremium();
     }, [])
   );
+
+  const getKootaColor = (colorKey) => {
+    const map = {
+      gold: COLORS.gold,
+      deva: COLORS.deva || "#A78BFA",
+      manushya: COLORS.manushya || "#60A5FA",
+      teal: COLORS.teal || "#4ECDC4",
+    };
+    return map[colorKey] || COLORS.gold;
+  };
 
   const handleLogout = () => {
     Alert.alert("Sign Out", "Are you sure?", [
@@ -694,19 +861,33 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleDeletePhoto = () => {
+    Alert.alert("Delete Photo", "Remove your profile photo?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          setDeletingPhoto(true);
+          try {
+            const photoUrl = user.photos?.[0];
+            if (photoUrl) {
+              await authAPI.deletePhoto(photoUrl);
+              dispatch(updateUser({ photos: [] }));
+            }
+          } catch (err) {
+            Alert.alert("Error", err?.response?.data?.message || err.message);
+          } finally {
+            setDeletingPhoto(false);
+          }
+        },
+      },
+    ]);
+  };
+
   if (!user) return null;
 
   const photoUri = user.photos?.[0];
-
-  const getKootaColor = (colorKey) => {
-    const map = {
-      gold: COLORS.gold,
-      deva: COLORS.deva || "#A78BFA",
-      manushya: COLORS.manushya || "#60A5FA",
-      teal: COLORS.teal || "#4ECDC4",
-    };
-    return map[colorKey] || COLORS.gold;
-  };
 
   return (
     <>
@@ -717,16 +898,71 @@ export default function ProfileScreen() {
       >
         <BrandHeader title="PROFILE" showLogo />
 
-        {/* ── Big Photo Hero ─────────────────────────────────────────────── */}
-        <TouchableOpacity
-          onPress={handleChangePhoto}
-          activeOpacity={0.9}
+        {/* ── NAME — always visible at top regardless of photo ─────────────── */}
+        <View
           style={{
             marginHorizontal: rp(20),
             marginTop: rp(16),
-            marginBottom: rp(20),
+            marginBottom: rp(12),
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
           }}
         >
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                fontFamily: FONTS.headingBold,
+                fontSize: rf(24),
+                color: COLORS.textPrimary,
+              }}
+            >
+              {user.name}
+            </Text>
+            {user.age && (
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: rf(14),
+                  color: COLORS.textSecondary,
+                  marginTop: rp(2),
+                }}
+              >
+                {user.age} · {user.gender || ""}
+                {kundli && (
+                  <Text style={{ color: COLORS.gold }}>
+                    {" "}
+                    · ✦ {kundli.nakshatra}
+                  </Text>
+                )}
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity
+            style={{
+              backgroundColor: COLORS.bgElevated,
+              borderRadius: RADIUS.md,
+              paddingHorizontal: rp(12),
+              paddingVertical: rp(6),
+              borderWidth: 1,
+              borderColor: COLORS.border,
+            }}
+            onPress={() => setEditName(true)}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.bodyMedium,
+                fontSize: rf(12),
+                color: COLORS.textSecondary,
+              }}
+            >
+              ✏️ Edit
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Big Photo Hero ─────────────────────────────────────────────── */}
+        <View style={{ marginHorizontal: rp(20), marginBottom: rp(20) }}>
           <View
             style={{
               width: "100%",
@@ -736,14 +972,9 @@ export default function ProfileScreen() {
               backgroundColor: gc?.bg || COLORS.bgElevated,
               borderWidth: 1.5,
               borderColor: gc?.color ? gc.color + "60" : COLORS.border,
-              shadowColor: gc?.color || COLORS.gold,
-              shadowOffset: { width: 0, height: rs(8) },
-              shadowOpacity: 0.25,
-              shadowRadius: rs(20),
-              elevation: 14,
             }}
           >
-            {uploadingPhoto ? (
+            {uploadingPhoto || deletingPhoto ? (
               <View
                 style={{
                   flex: 1,
@@ -760,7 +991,7 @@ export default function ProfileScreen() {
                     marginTop: rs(12),
                   }}
                 >
-                  Uploading...
+                  {uploadingPhoto ? "Uploading..." : "Removing..."}
                 </Text>
               </View>
             ) : photoUri ? (
@@ -770,92 +1001,54 @@ export default function ProfileScreen() {
                   style={{ width: "100%", height: "100%" }}
                   resizeMode="cover"
                 />
-                <View
-                  style={{
-                    position: "absolute",
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    paddingHorizontal: rp(20),
-                    paddingBottom: rp(20),
-                    paddingTop: rp(60),
-                    backgroundColor: "rgba(0,0,0,0.55)",
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: FONTS.headingBold,
-                      fontSize: rf(26),
-                      color: "#fff",
-                      marginBottom: rp(2),
-                    }}
-                  >
-                    {user.name}
-                  </Text>
-                  {user.age && (
-                    <Text
-                      style={{
-                        fontFamily: FONTS.body,
-                        fontSize: rf(14),
-                        color: "rgba(255,255,255,0.8)",
-                      }}
-                    >
-                      {user.age} · {user.gender || ""}
-                    </Text>
-                  )}
-                  {kundli && gc && (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: rs(6),
-                        marginTop: rp(8),
-                        alignSelf: "flex-start",
-                        paddingHorizontal: rp(10),
-                        paddingVertical: rp(4),
-                        borderRadius: RADIUS.full,
-                        backgroundColor: "rgba(255,255,255,0.15)",
-                        borderWidth: 1,
-                        borderColor: "rgba(255,255,255,0.3)",
-                      }}
-                    >
-                      <Text style={{ fontSize: rf(14) }}>{gc.emoji}</Text>
-                      <Text
-                        style={{
-                          fontFamily: FONTS.bodyMedium,
-                          fontSize: rf(12),
-                          color: "#fff",
-                        }}
-                      >
-                        {kundli.nakshatra} · {gc.title}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+                {/* Action buttons overlay */}
                 <View
                   style={{
                     position: "absolute",
                     top: rp(14),
                     right: rp(14),
-                    width: rs(36),
-                    height: rs(36),
-                    borderRadius: rs(18),
-                    backgroundColor: "rgba(0,0,0,0.55)",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    flexDirection: "row",
+                    gap: rs(8),
                   }}
                 >
-                  <Text style={{ fontSize: rf(18) }}>📷</Text>
+                  <TouchableOpacity
+                    style={{
+                      width: rs(36),
+                      height: rs(36),
+                      borderRadius: rs(18),
+                      backgroundColor: "rgba(0,0,0,0.55)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    onPress={handleChangePhoto}
+                  >
+                    <Text style={{ fontSize: rf(16) }}>📷</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{
+                      width: rs(36),
+                      height: rs(36),
+                      borderRadius: rs(18),
+                      backgroundColor: "rgba(220,38,38,0.7)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    onPress={handleDeletePhoto}
+                  >
+                    <Text style={{ fontSize: rf(16) }}>🗑</Text>
+                  </TouchableOpacity>
                 </View>
               </>
             ) : (
-              <View
+              <TouchableOpacity
                 style={{
                   flex: 1,
                   alignItems: "center",
                   justifyContent: "center",
                   gap: rs(12),
                 }}
+                onPress={handleChangePhoto}
+                activeOpacity={0.8}
               >
                 <Text style={{ fontSize: rf(64), opacity: 0.3 }}>👤</Text>
                 <Text
@@ -873,7 +1066,6 @@ export default function ProfileScreen() {
                     borderRadius: RADIUS.lg,
                     paddingHorizontal: rp(20),
                     paddingVertical: rp(10),
-                    marginTop: rp(8),
                   }}
                 >
                   <Text
@@ -886,12 +1078,12 @@ export default function ProfileScreen() {
                     Upload Photo
                   </Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
           </View>
-        </TouchableOpacity>
+        </View>
 
-        {/* ── Bio ─────────────────────────────────────────────────────────── */}
+        {/* ── Bio ──────────────────────────────────────────────────────────── */}
         <View style={{ marginHorizontal: rp(20), marginBottom: rp(16) }}>
           <Text
             style={{
@@ -910,7 +1102,7 @@ export default function ProfileScreen() {
           />
         </View>
 
-        {/* ── Subscription ─────────────────────────────────────────────────── */}
+        {/* ── Subscription ────────────────────────────────────────────────── */}
         <View
           style={{
             marginHorizontal: rp(20),
@@ -1059,7 +1251,7 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* ── Cosmic Identity ────────────────────────────────────────────────── */}
+        {/* ── Cosmic Identity ─────────────────────────────────────────────── */}
         {kundli && gc && (
           <View
             style={{
@@ -1083,7 +1275,6 @@ export default function ProfileScreen() {
             >
               COSMIC IDENTITY
             </Text>
-            {/* Nakshatra banner */}
             <View
               style={{
                 flexDirection: "row",
@@ -1143,7 +1334,6 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             </View>
-            {/* Attribute chips */}
             <View
               style={{ flexDirection: "row", flexWrap: "wrap", gap: rs(8) }}
             >
@@ -1192,7 +1382,7 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* ── MY ASHTA KOOTA ATTRIBUTES — rich cards ──────────────────────── */}
+        {/* ── Ashta Koota Attributes ────────────────────────────────────── */}
         {kundli && (
           <View
             style={{
@@ -1226,10 +1416,8 @@ export default function ProfileScreen() {
               }}
             >
               Your personal cosmic values — used to compute compatibility with
-              matches. The "max pts" shown is the maximum that Koota contributes
-              in any match.
+              matches.
             </Text>
-
             <View style={{ gap: rp(10) }}>
               {OWN_KOOTA_INFO.map((k) => {
                 const myValue =
@@ -1243,9 +1431,14 @@ export default function ProfileScreen() {
                     ? kundli.vashya
                     : k.field === "varna"
                     ? kundli.varna
+                    : k.field === "lordPlanet"
+                    ? kundli.lordPlanet
+                    : k.field === "bhakoot"
+                    ? kundli.rashi // Bhakoot is based on Rashi
+                    : k.field === "tara"
+                    ? kundli.nakshatra // Tara is based on Nakshatra
                     : "—";
                 const accent = getKootaColor(k.colorKey);
-
                 return (
                   <View
                     key={k.key}
@@ -1279,48 +1472,41 @@ export default function ProfileScreen() {
                       </Text>
                       <View
                         style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: rs(8),
+                          backgroundColor: accent + "20",
+                          borderRadius: RADIUS.full,
+                          paddingHorizontal: rp(10),
+                          paddingVertical: rp(4),
+                          borderWidth: 1,
+                          borderColor: accent + "50",
                         }}
                       >
-                        <View
-                          style={{
-                            backgroundColor: accent + "20",
-                            borderRadius: RADIUS.full,
-                            paddingHorizontal: rp(10),
-                            paddingVertical: rp(4),
-                            borderWidth: 1,
-                            borderColor: accent + "50",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontFamily: FONTS.bodyBold,
-                              fontSize: rf(13),
-                              color: accent,
-                            }}
-                          >
-                            {myValue}
-                          </Text>
-                        </View>
                         <Text
                           style={{
-                            fontFamily: FONTS.body,
-                            fontSize: rf(11),
-                            color: COLORS.textDim,
+                            fontFamily: FONTS.bodyBold,
+                            fontSize: rf(13),
+                            color: accent,
                           }}
                         >
-                          max {k.maxPts}pts
+                          {myValue}
                         </Text>
                       </View>
+                      <Text
+                        style={{
+                          fontFamily: FONTS.body,
+                          fontSize: rf(11),
+                          color: COLORS.textDim,
+                          marginLeft: rs(6),
+                        }}
+                      >
+                        max {k.maxPts}pts
+                      </Text>
                     </View>
                     <Text
                       style={{
                         fontFamily: FONTS.body,
                         fontSize: rf(12),
                         color: COLORS.textSecondary,
-                        marginBottom: rp(4),
+                        marginBottom: rp(2),
                       }}
                     >
                       {k.desc}
@@ -1340,7 +1526,6 @@ export default function ProfileScreen() {
                 );
               })}
             </View>
-
             <View
               style={{
                 marginTop: rp(14),
@@ -1374,7 +1559,7 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* ── Preferences ───────────────────────────────────────────────────── */}
+        {/* ── Preferences ─────────────────────────────────────────────────── */}
         {user.preferences && (
           <View
             style={{
@@ -1441,21 +1626,21 @@ export default function ProfileScreen() {
               {
                 label: "Show me",
                 value:
-                  user.preferences.genderPref === "male"
-                    ? "Men"
-                    : user.preferences.genderPref === "female"
+                  user.gender === "male"
                     ? "Women"
-                    : "Both",
+                    : user.gender === "female"
+                    ? "Men"
+                    : "Everyone",
               },
               { label: "Looking for", value: user.lookingFor || "both" },
-            ].map((row) => (
+            ].map((row, i, arr) => (
               <View
                 key={row.label}
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
                   paddingVertical: rp(10),
-                  borderBottomWidth: 1,
+                  borderBottomWidth: i < arr.length - 1 ? 1 : 0,
                   borderBottomColor: COLORS.border,
                 }}
               >
@@ -1482,7 +1667,7 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* ── Settings ──────────────────────────────────────────────────────── */}
+        {/* ── Settings ────────────────────────────────────────────────────── */}
         <View
           style={{
             marginHorizontal: rp(20),
@@ -1574,7 +1759,7 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        {/* ── Account ──────────────────────────────────────────────────────── */}
+        {/* ── Account ────────────────────────────────────────────────────── */}
         <View
           style={{
             marginHorizontal: rp(20),
@@ -1597,6 +1782,36 @@ export default function ProfileScreen() {
           >
             ACCOUNT
           </Text>
+          {/* Email — read only */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingVertical: rp(10),
+              borderBottomWidth: 1,
+              borderBottomColor: COLORS.border,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: rf(14),
+                color: COLORS.textSecondary,
+              }}
+            >
+              Email
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: rf(14),
+                color: COLORS.textDim,
+              }}
+            >
+              {user.email || "—"}
+            </Text>
+          </View>
           <TouchableOpacity
             style={{
               flexDirection: "row",
@@ -1691,6 +1906,15 @@ export default function ProfileScreen() {
           }}
         />
       )}
+      <EditNameModal
+        visible={editName}
+        currentName={user?.name}
+        onClose={() => setEditName(false)}
+        onSaved={(name) => {
+          dispatch(updateUser({ name }));
+          setEditName(false);
+        }}
+      />
     </>
   );
 }
