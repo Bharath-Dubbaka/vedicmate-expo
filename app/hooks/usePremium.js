@@ -5,13 +5,13 @@
 import { useCallback } from "react";
 import { Alert } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
-// import Purchases from "react-native-purchases";
-let Purchases = null;
-try {
-  Purchases = require("react-native-purchases").default;
-} catch (e) {
-  console.log("[RC] react-native-purchases not available in Expo Go");
-}
+import Purchases from "react-native-purchases";
+// let Purchases = null;
+// try {
+//   Purchases = require("react-native-purchases").default;
+// } catch (e) {
+//   console.log("[RC] react-native-purchases not available in Expo Go");
+// }
 
 import {
   fetchPremiumStatus,

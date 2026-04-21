@@ -118,45 +118,34 @@ function PremiumInit() {
   const user = useSelector(selectUser);
   const prevTokenRef = useRef(null);
 
+  // Configure RC once on mount
   useEffect(() => {
-    const isExpoGo =
-      typeof __DEV__ !== "undefined" &&
-      global.expo?.modules?.ExpoModulesCore === undefined;
-
-    if (isExpoGo) {
-      console.log("[RC] Expo Go detected — skipping configure");
-      return;
-    }
-
-    try {
-      if (process.env.EXPO_PUBLIC_REVENUECAT_KEY) {
-        Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY });
-      }
-    } catch (e) {
-      console.log("[RC] Configure error:", e.message);
+    if (process.env.EXPO_PUBLIC_REVENUECAT_KEY) {
+      Purchases.configure({
+        apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY,
+      });
     }
   }, []);
 
+  // Login/logout RC when auth state changes
   useEffect(() => {
     const wasLoggedIn = !!prevTokenRef.current;
     const isNowLoggedIn = !!token;
     prevTokenRef.current = token;
 
     if (isNowLoggedIn && !wasLoggedIn) {
+      // User just logged in — identify them in RC
       if (user?.id) {
-        try {
-          Purchases.logIn(user.id)
-            .then(() => console.log("[RC] Logged in user:", user.id))
-            .catch((err) => console.warn("[RC] Login error:", err.message));
-        } catch {}
+        Purchases.logIn(user.id)
+          .then(() => console.log("[RC] Logged in user:", user.id))
+          .catch((err) => console.warn("[RC] Login error:", err.message));
       }
       dispatch(fetchPremiumStatus());
     } else if (!isNowLoggedIn && wasLoggedIn) {
-      try {
-        Purchases.logOut()
-          .then(() => console.log("[RC] Logged out"))
-          .catch(() => {});
-      } catch {}
+      // User logged out — reset RC
+      Purchases.logOut()
+        .then(() => console.log("[RC] Logged out"))
+        .catch(() => {});
       dispatch(resetPremium());
     }
   }, [token, user?.id]);
