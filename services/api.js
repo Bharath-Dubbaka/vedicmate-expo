@@ -71,12 +71,13 @@ export const authAPI = {
   updateMe: (data) => api.patch("/auth/me", data),
   googleAuth: (data) => api.post("/auth/google", data),
   uploadPhoto: (formData) =>
-    api.post("/auth/photos", formData, {
+    api.post("/auth/photo", formData, {
       headers: { "Content-Type": "multipart/form-data" },
       timeout: 30000,
     }),
   // Fixed: pass photoUrl in body, correct endpoint
   deletePhoto: (photoUrl) => api.delete("/auth/photo", { data: { photoUrl } }),
+  deleteAccount: () => api.delete("/auth/account"),
 };
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
@@ -103,6 +104,7 @@ export const matchingAPI = {
   unmatch: (matchId) => api.delete(`/matching/unmatch/${matchId}`),
   report: (userId, reason) =>
     api.post(`/matching/report/${userId}`, { reason }), // NEW — block/report
+  block: (userId) => api.post(`/matching/block/${userId}`),
 };
 
 // ── Chat ──────────────────────────────────────────────────────────────────────

@@ -306,9 +306,18 @@ export default function PhotoUploadScreen() {
             )}
           </TouchableOpacity>
         )}
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={{ alignItems: "center", paddingVertical: SPACING.sm }}
-          onPress={() => router.replace("/(tabs)/discover")}
+          onPress={() => {
+            if (!photoUri) {
+              Alert.alert(
+                "Photo required",
+                "Please add at least one photo to continue. Profiles without photos get significantly fewer matches."
+              );
+              return;
+            }
+            router.replace("/(tabs)/discover");
+          }}
           disabled={uploading}
         >
           <Text
@@ -318,9 +327,9 @@ export default function PhotoUploadScreen() {
               color: COLORS.textDim,
             }}
           >
-            {photoUri ? "Skip for now →" : "Skip — add photo later →"}
+            {photoUri ? "Skip upload, use later →" : "Add photo to continue →"}
           </Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
     </View>
   );

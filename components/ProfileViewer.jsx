@@ -28,7 +28,6 @@ import { matchingAPI } from "../services/api";
 import { rf, rs, rp } from "../constants/responsive";
 import { useRouter } from "expo-router";
 import CosmicMatchSheet from "./CosmicMatchSheet";
-
 const { height: SCREEN_H } = Dimensions.get("window");
 
 const KOOTA_LIST = [
@@ -92,6 +91,7 @@ export default function ProfileViewer({ visible, user, onClose, onLiked }) {
   const [liking, setLiking] = useState(false);
   const [liked, setLiked] = useState(false);
   const [matchData, setMatchData] = useState(null);
+  const [photoIndex, setPhotoIndex] = useState(0);
 
   useEffect(() => {
     if (visible && user?._id && !compatData) {
@@ -111,6 +111,20 @@ export default function ProfileViewer({ visible, user, onClose, onLiked }) {
       setMatchData(null);
     }
   }, [visible, user?._id]);
+
+  //refresh when user changes
+  useEffect(() => {
+    setPhotoIndex(0);
+  }, [user?._id]);
+
+  //auto scroll at 3.5 secs
+  useEffect(() => {
+    if (!user?.photos || user.photos.length <= 1) return;
+    const timer = setInterval(() => {
+      setPhotoIndex((i) => (i + 1) % user.photos.length);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, [user?.photos?.length]);
 
   const handleLike = async () => {
     if (!user?._id || liked) return;
@@ -147,6 +161,8 @@ export default function ProfileViewer({ visible, user, onClose, onLiked }) {
 
   // deity field — backend may use either key
   const deity = kundli?.deity || kundli?.god || null;
+  const photos = (user.photos || []).filter(Boolean);
+  const hasPhotos = photos.length > 0;
 
   return (
     <>
@@ -163,7 +179,7 @@ export default function ProfileViewer({ visible, user, onClose, onLiked }) {
               flexDirection: "row",
               alignItems: "center",
               paddingHorizontal: rp(20),
-              paddingTop: rs(48),
+              paddingTop: rs(24),
               paddingBottom: rp(16),
               borderBottomWidth: 1,
               borderBottomColor: COLORS.border,
@@ -199,19 +215,79 @@ export default function ProfileViewer({ visible, user, onClose, onLiked }) {
             showsVerticalScrollIndicator={false}
           >
             {/* Photo */}
+            {/* ── FULL SCREEN PHOTO with swipe dots ───── */}
             <View
               style={{
                 width: "100%",
-                height: SCREEN_H * 0.45,
+                height: SCREEN_H * 0.55,
+                position: "relative",
                 backgroundColor: gc?.bg || COLORS.bgElevated,
               }}
             >
-              {user.photos?.[0] ? (
-                <Image
-                  source={{ uri: user.photos[0] }}
-                  style={{ width: "100%", height: "100%" }}
-                  resizeMode="cover"
-                />
+              {hasPhotos ? (
+                <>
+                  <Image
+                    source={{ uri: photos[photoIndex] }}
+                    style={{ width: "100%", height: "100%" }}
+                    resizeMode="cover"
+                  />
+                  {/* Left/right tap zones */}
+                  {photoIndex > 0 && (
+                    <TouchableOpacity
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: "30%",
+                      }}
+                      onPress={() => setPhotoIndex((i) => i - 1)}
+                      activeOpacity={1}
+                    />
+                  )}
+                  {photoIndex < photos.length - 1 && (
+                    <TouchableOpacity
+                      style={{
+                        position: "absolute",
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: "30%",
+                      }}
+                      onPress={() => setPhotoIndex((i) => i + 1)}
+                      activeOpacity={1}
+                    />
+                  )}
+                  {/* Dots indicator */}
+                  {photos.length > 1 && (
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: rp(12),
+                        left: 0,
+                        right: 0,
+                        flexDirection: "row",
+                        justifyContent: "center",
+                        gap: rs(6),
+                      }}
+                    >
+                      {photos.map((_, i) => (
+                        <View
+                          key={i}
+                          style={{
+                            width: i === photoIndex ? rs(20) : rs(6),
+                            height: rs(6),
+                            borderRadius: rs(3),
+                            backgroundColor:
+                              i === photoIndex
+                                ? "#fff"
+                                : "rgba(255,255,255,0.5)",
+                          }}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </>
               ) : (
                 <View
                   style={{

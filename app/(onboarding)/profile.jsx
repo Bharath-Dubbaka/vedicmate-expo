@@ -371,6 +371,7 @@ export default function ProfileOnboardingScreen() {
                 paddingVertical: SPACING.sm,
                 borderRadius: RADIUS.md,
                 borderWidth: 1,
+                marginBottom: SPACING.xl,
                 borderColor: minGuna === val ? COLORS.gold : COLORS.border,
                 backgroundColor:
                   minGuna === val ? COLORS.bgElevated : COLORS.bgCard,

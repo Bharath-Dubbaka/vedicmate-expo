@@ -792,6 +792,7 @@ export default function MatchesScreen() {
   const [selectedProfile, setSelectedProfile] = useState(null); // for CompatibilityModal
   const [viewingUser, setViewingUser] = useState(null); // for ProfileViewer
   const [blockReportTarget, setBlockReportTarget] = useState(null);
+
   const {
     isPremium,
     boostActive,
@@ -1227,6 +1228,8 @@ export default function MatchesScreen() {
         profile={selectedProfile}
         onClose={() => setSelectedProfile(null)}
       />
+
+
 
       {/* Full profile viewer for premium users */}
       <ProfileViewer

@@ -35,6 +35,7 @@ import { useDispatch, useSelector } from "react-redux";
 import {
   fetchMessages,
   addMessage,
+  removeMessage,
   selectMessages,
   selectChatLoading,
 } from "../../../store/slices/chatSlice";
@@ -51,6 +52,7 @@ import BlockReportModal from "../../../components/BlockReportModal";
 import CosmicMatchSheet from "../../../components/CosmicMatchSheet";
 import { matchingAPI } from "../../../services/api";
 import { rf, rs, rp } from "../../../constants/responsive";
+import { Alert } from "react-native";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -157,6 +159,19 @@ function ProfileModal({ visible, matchInfo, onClose }) {
   const [theirKundli, setTheirKundli] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPhoto, setShowPhoto] = useState(false);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const photos =
+    matchInfo?.photos || (matchInfo?.photo ? [matchInfo.photo] : []);
+  const hasPhotos = photos.length > 0;
+
+  // Auto-advance photos every 3.5 seconds
+  useEffect(() => {
+    if (photos.length <= 1) return;
+    const timer = setInterval(() => {
+      setPhotoIndex((i) => (i + 1) % photos.length);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, [photos.length]);
 
   useEffect(() => {
     if (visible && matchInfo?.userId && !compatData) {
@@ -260,6 +275,8 @@ function ProfileModal({ visible, matchInfo, onClose }) {
   const allPopulated =
     theirAttributes.filter((a) => a.value !== "—").length >= 6;
 
+  // console.log("matchInfo photos:", matchInfo?.photos);
+
   return (
     <>
       <Modal
@@ -275,7 +292,7 @@ function ProfileModal({ visible, matchInfo, onClose }) {
               flexDirection: "row",
               alignItems: "center",
               paddingHorizontal: rp(20),
-              paddingTop: rs(56),
+              paddingTop: rs(28),
               paddingBottom: rp(16),
               borderBottomWidth: 1,
               borderBottomColor: COLORS.border,
@@ -883,23 +900,81 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                   )}
 
                   {/* RESTORED: clickable photo thumbnail */}
-                  {matchInfo?.photo && (
-                    <TouchableOpacity
-                      onPress={() => setShowPhoto(true)}
-                      activeOpacity={0.9}
+                  {hasPhotos && (
+                    <View
                       style={{
                         borderRadius: RADIUS.xl,
                         overflow: "hidden",
                         marginBottom: rp(16),
                         height: rs(200),
+                        position: "relative",
                       }}
                     >
                       <Image
-                        source={{ uri: matchInfo.photo }}
+                        source={{ uri: photos[photoIndex] }}
                         style={{ width: "100%", height: "100%" }}
                         resizeMode="cover"
                       />
-                      <View
+                      {/* Left tap */}
+                      {photoIndex > 0 && (
+                        <TouchableOpacity
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: "30%",
+                          }}
+                          onPress={() => setPhotoIndex((i) => i - 1)}
+                          activeOpacity={1}
+                        />
+                      )}
+                      {/* Right tap */}
+                      {photoIndex < photos.length - 1 && (
+                        <TouchableOpacity
+                          style={{
+                            position: "absolute",
+                            right: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: "30%",
+                          }}
+                          onPress={() => setPhotoIndex((i) => i + 1)}
+                          activeOpacity={1}
+                        />
+                      )}
+                      {/* Dots */}
+                      {photos.length > 1 && (
+                        <View
+                          style={{
+                            position: "absolute",
+                            top: rp(8),
+                            left: 0,
+                            right: 0,
+                            flexDirection: "row",
+                            justifyContent: "center",
+                            gap: rs(6),
+                          }}
+                        >
+                          {photos.map((_, i) => (
+                            <View
+                              key={i}
+                              style={{
+                                width: i === photoIndex ? rs(20) : rs(6),
+                                height: rs(6),
+                                borderRadius: rs(3),
+                                backgroundColor:
+                                  i === photoIndex
+                                    ? "#fff"
+                                    : "rgba(255,255,255,0.5)",
+                              }}
+                            />
+                          ))}
+                        </View>
+                      )}
+                      {/* Expand button */}
+                      <TouchableOpacity
+                        onPress={() => setShowPhoto(true)}
                         style={{
                           position: "absolute",
                           bottom: rp(10),
@@ -919,8 +994,8 @@ function ProfileModal({ visible, matchInfo, onClose }) {
                         >
                           Tap to expand 🔍
                         </Text>
-                      </View>
-                    </TouchableOpacity>
+                      </TouchableOpacity>
+                    </View>
                   )}
 
                   {/* Gana hero */}
@@ -1132,7 +1207,7 @@ function ProfileModal({ visible, matchInfo, onClose }) {
       </Modal>
       <PhotoViewer
         visible={showPhoto}
-        photoUri={matchInfo?.photo}
+        photoUri={photos[photoIndex]} // was matchInfo?.photo
         onClose={() => setShowPhoto(false)}
       />
     </>
@@ -1161,6 +1236,7 @@ export default function ChatScreen() {
   const typingTimeout = useRef(null);
   const socketRef = useRef(null);
   const tempIdCounter = useRef(0);
+  const [reportingMessage, setReportingMessage] = useState(null);
 
   useEffect(() => {
     const match = matches.find(
@@ -1170,7 +1246,12 @@ export default function ChatScreen() {
       setMatchInfo({
         name: match.user?.name,
         age: match.user?.age,
-        photo: match.user?.photo || match.user?.photos?.[0] || null,
+        photo: match.user?.photo || match.user?.photos?.[0] || null, // keep for avatar
+        photos: match.user?.photos?.length
+          ? match.user.photos
+          : match.user?.photo
+          ? [match.user.photo]
+          : [],
         nakshatra: match.user?.cosmicCard?.nakshatra,
         cosmicCard: match.user?.cosmicCard || {},
         gunaScore: match.compatibility?.gunaScore,
@@ -1196,6 +1277,12 @@ export default function ChatScreen() {
       const socket = await connectSocket();
       socketRef.current = socket;
       if (!socket) return;
+
+      // Remove old listeners before adding new ones
+      socket.off("message:new");
+      socket.off("typing:start");
+      socket.off("typing:stop");
+
       socket.emit("join:matches", [matchId]);
       socket.on("message:new", (msg) => {
         if (msg.matchId?.toString() === matchId?.toString()) {
@@ -1245,7 +1332,12 @@ export default function ChatScreen() {
     setInputText("");
     emitTypingStop(matchId);
     scrollToBottom();
-    sendSocketMessage(matchId, text, tempId, () => {});
+    sendSocketMessage(matchId, text, tempId, (response) => {
+      if (response?.error) {
+        dispatch(removeMessage({ matchId, messageId: tempId }));
+        Alert.alert("Message blocked", response.error);
+      }
+    });
   };
 
   const isMyMessage = (msg) => {
@@ -1256,70 +1348,78 @@ export default function ChatScreen() {
   const renderMessage = ({ item }) => {
     const mine = isMyMessage(item);
     return (
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "flex-end",
-          gap: rs(8),
-          marginVertical: rp(2),
-          justifyContent: mine ? "flex-end" : "flex-start",
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onLongPress={() => {
+          if (!mine) setReportingMessage(item);
         }}
+        delayLongPress={400}
       >
-        {!mine && (
-          <View
-            style={{
-              width: rs(28),
-              height: rs(28),
-              borderRadius: rs(14),
-              backgroundColor: COLORS.bgElevated,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ fontSize: rf(14) }}>
-              {matchInfo?.nakshatra?.split(" ")[0] || "🌟"}
-            </Text>
-          </View>
-        )}
         <View
           style={{
-            maxWidth: "75%",
-            borderRadius: RADIUS.lg,
-            padding: rp(10),
-            paddingHorizontal: rp(14),
-            backgroundColor: mine ? COLORS.gold : COLORS.bgElevated,
-            borderBottomRightRadius: mine ? 4 : RADIUS.lg,
-            borderBottomLeftRadius: mine ? RADIUS.lg : 4,
+            flexDirection: "row",
+            alignItems: "flex-end",
+            gap: rs(8),
+            marginVertical: rp(2),
+            justifyContent: mine ? "flex-end" : "flex-start",
           }}
         >
-          <Text
+          {!mine && (
+            <View
+              style={{
+                width: rs(28),
+                height: rs(28),
+                borderRadius: rs(14),
+                backgroundColor: COLORS.bgElevated,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: rf(14) }}>
+                {matchInfo?.nakshatra?.split(" ")[0] || "🌟"}
+              </Text>
+            </View>
+          )}
+          <View
             style={{
-              fontFamily: FONTS.body,
-              fontSize: rf(15),
-              color: mine ? "#fff" : COLORS.textPrimary,
-              lineHeight: rf(21),
+              maxWidth: "75%",
+              borderRadius: RADIUS.lg,
+              padding: rp(10),
+              paddingHorizontal: rp(14),
+              backgroundColor: mine ? COLORS.gold : COLORS.bgElevated,
+              borderBottomRightRadius: mine ? 4 : RADIUS.lg,
+              borderBottomLeftRadius: mine ? RADIUS.lg : 4,
             }}
           >
-            {item.text}
-          </Text>
-          <Text
-            style={{
-              fontFamily: FONTS.body,
-              fontSize: rf(10),
-              color: mine ? "rgba(255,255,255,0.6)" : COLORS.textSecondary,
-              textAlign: "right",
-              marginTop: rp(2),
-            }}
-          >
-            {new Date(item.createdAt).toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            })}
-            {item.pending ? " ⏳" : ""}
-          </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: rf(15),
+                color: mine ? "#fff" : COLORS.textPrimary,
+                lineHeight: rf(21),
+              }}
+            >
+              {item.text}
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONTS.body,
+                fontSize: rf(10),
+                color: mine ? "rgba(255,255,255,0.6)" : COLORS.textSecondary,
+                textAlign: "right",
+                marginTop: rp(2),
+              }}
+            >
+              {new Date(item.createdAt).toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              })}
+              {item.pending ? " ⏳" : ""}
+            </Text>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1559,6 +1659,119 @@ export default function ChatScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Report message sheet */}
+      {reportingMessage && (
+        <Modal
+          visible={!!reportingMessage}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setReportingMessage(null)}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              justifyContent: "flex-end",
+            }}
+          >
+            <TouchableOpacity
+              style={{ flex: 1 }}
+              onPress={() => setReportingMessage(null)}
+            />
+            <View
+              style={{
+                backgroundColor: COLORS.bgCard,
+                borderTopLeftRadius: RADIUS.xl,
+                borderTopRightRadius: RADIUS.xl,
+                padding: rp(24),
+                paddingBottom: rs(40),
+              }}
+            >
+              <View
+                style={{
+                  width: 40,
+                  height: 4,
+                  backgroundColor: COLORS.border,
+                  borderRadius: 2,
+                  alignSelf: "center",
+                  marginBottom: rp(16),
+                }}
+              />
+              <Text
+                style={{
+                  fontFamily: FONTS.bodyBold,
+                  fontSize: rf(16),
+                  color: COLORS.textPrimary,
+                  marginBottom: rp(6),
+                }}
+              >
+                Report this message?
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: rf(13),
+                  color: COLORS.textSecondary,
+                  marginBottom: rp(20),
+                  lineHeight: rf(19),
+                }}
+              >
+                "{reportingMessage.text?.substring(0, 80)}
+                {reportingMessage.text?.length > 80 ? "..." : ""}"
+              </Text>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: COLORS.rose,
+                  borderRadius: RADIUS.lg,
+                  paddingVertical: rp(14),
+                  alignItems: "center",
+                  marginBottom: rp(10),
+                }}
+                onPress={async () => {
+                  try {
+                    await matchingAPI.reportMessage(
+                      reportingMessage._id,
+                      matchId
+                    );
+                    setReportingMessage(null);
+                    Alert.alert(
+                      "Reported",
+                      "This message has been flagged for review."
+                    );
+                  } catch {
+                    Alert.alert("Error", "Could not submit report. Try again.");
+                  }
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyBold,
+                    fontSize: rf(15),
+                    color: "#fff",
+                  }}
+                >
+                  Report Message
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ paddingVertical: rp(12), alignItems: "center" }}
+                onPress={() => setReportingMessage(null)}
+              >
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyMedium,
+                    fontSize: rf(15),
+                    color: COLORS.textSecondary,
+                  }}
+                >
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       <ProfileModal
         visible={showProfile}

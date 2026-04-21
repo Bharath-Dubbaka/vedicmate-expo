@@ -17,6 +17,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useDispatch, useSelector } from "react-redux";
@@ -257,7 +258,11 @@ export default function AuthScreen() {
                 backgroundColor: COLORS.bgElevated,
               }}
             >
-              <Text style={{ fontSize: 44 }}>🔮</Text>
+              <Image
+                source={require("../../assets/icon.png")} // adjust path to your logo file
+                style={{ width: 120, height: 120, borderRadius: 40 }}
+                resizeMode="contain"
+              />
             </View>
             <Text
               style={{
@@ -306,7 +311,7 @@ export default function AuthScreen() {
             </View>
           </Animated.View>
 
-          {/* Form card */}
+          {/* Form card for manual login , wasy testing using expo n preview*/}
           <Animated.View
             style={{
               width: "100%",
@@ -315,11 +320,10 @@ export default function AuthScreen() {
               borderWidth: 1,
               borderColor: COLORS.border,
               padding: SPACING.lg,
-              marginTop: SPACING.lg,
+              marginTop: SPACING.sm,
               opacity: formAnim,
             }}
           >
-            {/* Google button */}
             <TouchableOpacity
               style={{
                 flexDirection: "row",
@@ -368,7 +372,6 @@ export default function AuthScreen() {
               )}
             </TouchableOpacity>
 
-            {/* OR divider */}
             <View
               style={{
                 flexDirection: "row",
@@ -394,7 +397,6 @@ export default function AuthScreen() {
               />
             </View>
 
-            {/* Mode toggle */}
             <View
               style={{
                 flexDirection: "row",
@@ -429,7 +431,6 @@ export default function AuthScreen() {
               ))}
             </View>
 
-            {/* Name (register only) */}
             {mode === "register" && (
               <View style={{ marginBottom: SPACING.md }}>
                 <Text
@@ -465,7 +466,6 @@ export default function AuthScreen() {
               </View>
             )}
 
-            {/* Email */}
             <View style={{ marginBottom: SPACING.md }}>
               <Text
                 style={{
@@ -501,7 +501,6 @@ export default function AuthScreen() {
               />
             </View>
 
-            {/* Password */}
             <View style={{ marginBottom: SPACING.md }}>
               <Text
                 style={{
@@ -555,7 +554,6 @@ export default function AuthScreen() {
               </View>
             </View>
 
-            {/* Error */}
             {authError && (
               <View
                 style={{
@@ -580,7 +578,6 @@ export default function AuthScreen() {
               </View>
             )}
 
-            {/* Submit */}
             <TouchableOpacity
               style={{
                 backgroundColor: COLORS.gold,
@@ -615,7 +612,6 @@ export default function AuthScreen() {
               )}
             </TouchableOpacity>
 
-            {/* Astrology pills */}
             <View
               style={{
                 flexDirection: "row",
@@ -651,6 +647,116 @@ export default function AuthScreen() {
               )}
             </View>
           </Animated.View>
+
+          {/* Form card for production only google oauth*/}
+          {/* <Animated.View
+            style={{
+              width: "100%",
+              backgroundColor: COLORS.bgCard,
+              borderRadius: RADIUS.xl,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+              padding: SPACING.lg,
+              marginTop: SPACING.lg,
+              opacity: formAnim,
+            }}
+          >
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: SPACING.sm,
+                backgroundColor: COLORS.bgElevated,
+                borderRadius: RADIUS.lg,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                paddingVertical: SPACING.md + 4,
+                marginBottom: SPACING.md,
+                opacity: googleSignInAvailable ? 1 : 0.5,
+              }}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading || !googleSignInAvailable}
+              activeOpacity={0.85}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color={COLORS.textPrimary} />
+              ) : (
+                <>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyBold,
+                      fontSize: 20,
+                      color: "#4285F4",
+                      width: 26,
+                      textAlign: "center",
+                    }}
+                  >
+                    G
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FONTS.bodyMedium,
+                      fontSize: 16,
+                      color: COLORS.textPrimary,
+                    }}
+                  >
+                    Continue with Google
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {!googleSignInAvailable && (
+              <Text
+                style={{
+                  fontFamily: FONTS.body,
+                  fontSize: 12,
+                  color: COLORS.textDim,
+                  textAlign: "center",
+                  marginBottom: SPACING.md,
+                }}
+              >
+                Google Sign-In requires a native build
+              </Text>
+            )}
+
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                gap: SPACING.xs,
+                marginTop: SPACING.sm,
+              }}
+            >
+              {["🐾 Yoni Match", "✨ Guna Milan", "🔯 36-Point Score"].map(
+                (pill) => (
+                  <View
+                    key={pill}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: COLORS.border,
+                      borderRadius: RADIUS.full,
+                      paddingHorizontal: SPACING.sm,
+                      paddingVertical: 4,
+                      backgroundColor: COLORS.bgElevated,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: FONTS.body,
+                        fontSize: 11,
+                        color: COLORS.textSecondary,
+                      }}
+                    >
+                      {pill}
+                    </Text>
+                  </View>
+                )
+              )}
+            </View>
+          </Animated.View> */}
         </ScrollView>
 
         <Text

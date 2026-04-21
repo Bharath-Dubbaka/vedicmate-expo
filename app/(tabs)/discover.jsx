@@ -48,7 +48,6 @@ import SwipeLimitBanner from "../../components/SwipeLimitBanner";
 import BrandHeader from "../../components/BrandHeader";
 import CosmicMatchSheet from "../../components/CosmicMatchSheet";
 import { rf, rs, rp } from "../../constants/responsive";
-
 const { width: W, height: H } = Dimensions.get("window");
 
 const KOOTA_LIST = [
@@ -79,6 +78,10 @@ function ProfilePage({ profile, onLike, onPass }) {
   const pct = Math.round((profile.compatibility.totalScore / 36) * 100);
   const hasPhoto = !!profile.user.photos?.[0];
   const cc = profile.user.cosmicCard;
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const photos = profile.user.photos?.filter(Boolean) || [];
+  const hasPhotos = photos.length > 0;
+  const { height: SCREEN_H } = Dimensions.get("window");
 
   // deity — backend may use either key
   const deity = cc.deity || cc.god || null;
@@ -96,6 +99,20 @@ function ProfilePage({ profile, onLike, onPass }) {
     return cycle[idx % cycle.length];
   };
 
+  //Also reset photoIndex to 0 when profile changes
+  useEffect(() => {
+    setPhotoIndex(0);
+  }, [profile.user.id]);
+
+  // Auto-advance photos every 3.5 seconds
+  useEffect(() => {
+    if (photos.length <= 1) return;
+    const timer = setInterval(() => {
+      setPhotoIndex((i) => (i + 1) % photos.length);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, [photos.length]);
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: COLORS.bg }}
@@ -104,13 +121,77 @@ function ProfilePage({ profile, onLike, onPass }) {
       bounces={false}
     >
       {/* ── FULL SCREEN PHOTO ──────────────────────────────────────────────── */}
-      <View style={{ width: W, height: H * 0.72, position: "relative" }}>
-        {hasPhoto ? (
-          <Image
-            source={{ uri: profile.user.photos[0] }}
-            style={{ width: "100%", height: "100%" }}
-            resizeMode="cover"
-          />
+      <View
+        style={{
+          width: "100%",
+          height: SCREEN_H * 0.65,
+          position: "relative",
+          backgroundColor: gc?.bg || COLORS.bgElevated,
+        }}
+      >
+        {hasPhotos ? (
+          <>
+            <Image
+              source={{ uri: photos[photoIndex] }}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="cover"
+            />
+            {/* Left/right tap zones */}
+            {photoIndex > 0 && (
+              <TouchableOpacity
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: "30%",
+                }}
+                onPress={() => setPhotoIndex((i) => i - 1)}
+                activeOpacity={1}
+              />
+            )}
+            {photoIndex < photos.length - 1 && (
+              <TouchableOpacity
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: "30%",
+                }}
+                onPress={() => setPhotoIndex((i) => i + 1)}
+                activeOpacity={1}
+              />
+            )}
+
+            {/* Dots indicator */}
+            {photos.length > 1 && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: rp(12),
+                  left: 0,
+                  right: 0,
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: rs(6),
+                }}
+              >
+                {photos.map((_, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      width: i === photoIndex ? rs(20) : rs(6),
+                      height: rs(6),
+                      borderRadius: rs(3),
+                      backgroundColor:
+                        i === photoIndex ? "#fff" : "rgba(255,255,255,0.5)",
+                    }}
+                  />
+                ))}
+              </View>
+            )}
+          </>
         ) : (
           <View
             style={{
@@ -154,121 +235,123 @@ function ProfilePage({ profile, onLike, onPass }) {
             </Text>
           </View>
         )}
-
+        
         {/* Bottom overlay — name + gana + nakshatra */}
-        <View
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            paddingHorizontal: rp(20),
-            paddingBottom: rp(90),
-            paddingTop: rp(80),
-          }}
-        >
           <View
             style={{
-              flexDirection: "row",
-              alignItems: "flex-end",
-              justifyContent: "space-between",
-              marginBottom: rp(8),
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              paddingHorizontal: rp(20),
+              paddingBottom: rp(90),
+              paddingTop: rp(80),
+
             }}
           >
-            <View style={{ flex: 1, marginRight: rs(12) }}>
-              <Text
-                style={{
-                  fontFamily: FONTS.headingBold,
-                  fontSize: rf(30),
-                  color: hasPhoto ? "#fff" : COLORS.textPrimary,
-                  textShadowColor: hasPhoto ? "rgba(0,0,0,0.8)" : "transparent",
-                  textShadowOffset: { width: 0, height: 1 },
-                  textShadowRadius: 4,
-                }}
-              >
-                {profile.user.name}, {profile.user.age}
-              </Text>
-              {profile.user.lookingFor && (
-                <Text
-                  style={{
-                    fontFamily: FONTS.body,
-                    fontSize: rf(13),
-                    color: hasPhoto
-                      ? "rgba(255,255,255,0.85)"
-                      : COLORS.textSecondary,
-                    marginTop: rp(2),
-                  }}
-                >
-                  {profile.user.lookingFor === "marriage" ? "💍" : "💕"} Looking
-                  for {profile.user.lookingFor}
-                </Text>
-              )}
-            </View>
             <View
               style={{
                 flexDirection: "row",
-                alignItems: "center",
-                gap: rs(5),
-                paddingHorizontal: rp(12),
-                paddingVertical: rp(6),
-                borderRadius: RADIUS.full,
-                backgroundColor: gc.color + "30",
-                borderWidth: 1.5,
-                borderColor: gc.color + "70",
+                alignItems: "flex-end",
+                justifyContent: "space-between",
+                marginBottom: rp(8),
               }}
             >
-              <Text style={{ fontSize: rf(16) }}>{gc.emoji}</Text>
+              <View style={{ flex: 1, marginRight: rs(12) }}>
+                <Text
+                  style={{
+                    fontFamily: FONTS.headingBold,
+                    fontSize: rf(30),
+                    color: "#fff",
+                    textShadowColor: "rgb(0, 0, 0)",
+                    textShadowOffset: { width: 0, height: 2 },
+                    textShadowRadius: 8,
+                  }}
+                >
+                  {profile.user.name}, {profile.user.age}
+                </Text>
+                {profile.user.lookingFor && (
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: rf(13),
+                      color: hasPhoto
+                        ? "rgba(255,255,255,0.85)"
+                        : COLORS.textSecondary,
+                      marginTop: rp(2),
+                    }}
+                  >
+                    {profile.user.lookingFor === "marriage" ? "💍" : "💕"}{" "}
+                    Looking for {profile.user.lookingFor}
+                  </Text>
+                )}
+              </View>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: rs(5),
+                  paddingHorizontal: rp(12),
+                  paddingVertical: rp(6),
+                  borderRadius: RADIUS.full,
+                  backgroundColor: gc.color + "30",
+                  borderWidth: 1.5,
+                  borderColor: gc.color + "70",
+                }}
+              >
+                <Text style={{ fontSize: rf(16) }}>{gc.emoji}</Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyMedium,
+                    fontSize: rf(12),
+                    color: gc.color,
+                  }}
+                >
+                  {cc.gana}
+                </Text>
+              </View>
+            </View>
+            <View
+              style={{
+                alignSelf: "flex-start",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: rs(6),
+                backgroundColor: hasPhoto ? "rgba(255,255,255,0.15)" : gc.bg,
+                borderRadius: RADIUS.full,
+                paddingHorizontal: rp(12),
+                paddingVertical: rp(5),
+                borderWidth: 1,
+                borderColor: hasPhoto
+                  ? "rgba(255,255,255,0.3)"
+                  : gc.color + "40",
+              }}
+            >
+              <Text style={{ fontSize: rf(12) }}>✦</Text>
               <Text
                 style={{
                   fontFamily: FONTS.bodyMedium,
-                  fontSize: rf(12),
-                  color: gc.color,
+                  fontSize: rf(13),
+                  color: hasPhoto ? "#fff" : gc.color,
                 }}
               >
-                {cc.gana}
+                {cc.nakshatra}
               </Text>
+              {cc.rashi && (
+                <Text
+                  style={{
+                    fontFamily: FONTS.body,
+                    fontSize: rf(11),
+                    color: hasPhoto
+                      ? "rgba(255,255,255,0.7)"
+                      : COLORS.textSecondary,
+                  }}
+                >
+                  · {cc.rashi} Moon
+                </Text>
+              )}
             </View>
           </View>
-          <View
-            style={{
-              alignSelf: "flex-start",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: rs(6),
-              backgroundColor: hasPhoto ? "rgba(255,255,255,0.15)" : gc.bg,
-              borderRadius: RADIUS.full,
-              paddingHorizontal: rp(12),
-              paddingVertical: rp(5),
-              borderWidth: 1,
-              borderColor: hasPhoto ? "rgba(255,255,255,0.3)" : gc.color + "40",
-            }}
-          >
-            <Text style={{ fontSize: rf(12) }}>✦</Text>
-            <Text
-              style={{
-                fontFamily: FONTS.bodyMedium,
-                fontSize: rf(13),
-                color: hasPhoto ? "#fff" : gc.color,
-              }}
-            >
-              {cc.nakshatra}
-            </Text>
-            {cc.rashi && (
-              <Text
-                style={{
-                  fontFamily: FONTS.body,
-                  fontSize: rf(11),
-                  color: hasPhoto
-                    ? "rgba(255,255,255,0.7)"
-                    : COLORS.textSecondary,
-                }}
-              >
-                · {cc.rashi} Moon
-              </Text>
-            )}
-          </View>
-        </View>
-
         {/* Floating action buttons */}
         <View
           style={{
@@ -365,23 +448,23 @@ function ProfilePage({ profile, onLike, onPass }) {
       </View>
 
       {/* ── INFO CARDS ──────────────────────────────────────────────────────── */}
-      <View style={{ paddingTop: rp(48), paddingHorizontal: rp(20) }}>
+      <View style={{ paddingTop: rp(36), paddingHorizontal: rp(20) }}>
         {/* Bio */}
         {profile.user.bio ? (
           <View
             style={{
-              backgroundColor: COLORS.bgCard,
+              // backgroundColor: COLORS.bgCard,
               borderRadius: RADIUS.xl,
-              padding: rp(16),
-              marginBottom: rp(16),
-              borderWidth: 1,
+              padding: rp(8),
+              marginBottom: rp(8),
+              // borderWidth: 1,
               borderColor: COLORS.border,
             }}
           >
             <Text
               style={{
                 fontFamily: FONTS.body,
-                fontSize: rf(14),
+                fontSize: rf(20),
                 color: COLORS.textSecondary,
                 lineHeight: rf(22),
               }}

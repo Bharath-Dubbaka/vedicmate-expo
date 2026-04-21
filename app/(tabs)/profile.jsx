@@ -779,8 +779,9 @@ export default function ProfileScreen() {
   const { COLORS, FONTS, RADIUS, GANA_CONFIG } = useTheme();
 
   const [loggingOut, setLoggingOut] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [deletingPhoto, setDeletingPhoto] = useState(false);
+  // const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  // const [deletingPhoto, setDeletingPhoto] = useState(false);
+  const [uploadingSlot, setUploadingSlot] = useState(null); // null | 0 | 1 | 2
   const [showPaywall, setShowPaywall] = useState(false);
   const [editPrefs, setEditPrefs] = useState(false);
   const [editName, setEditName] = useState(false);
@@ -823,7 +824,70 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleChangePhoto = async () => {
+  // const handleChangePhoto = async () => {
+  //   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  //   if (status !== "granted") {
+  //     Alert.alert("Permission needed", "Please allow photo access.");
+  //     return;
+  //   }
+  //   const result = await ImagePicker.launchImageLibraryAsync({
+  //     mediaTypes: ["images"],
+  //     allowsEditing: true,
+  //     aspect: [3, 4],
+  //     quality: 0.85,
+  //   });
+  //   if (!result.canceled && result.assets?.[0]) {
+  //     const uri = result.assets[0].uri;
+  //     const filename = uri.split("/").pop();
+  //     const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
+  //     const mimeType = ext === "png" ? "image/png" : "image/jpeg";
+  //     const formData = new FormData();
+  //     formData.append("photo", { uri, name: filename, type: mimeType });
+  //     setUploadingPhoto(true);
+  //     try {
+  //       const res = await authAPI.uploadPhoto(formData);
+  //       if (res.data?.success) {
+  //         dispatch(updateUser({ photos: res.data.photos }));
+  //         const meRes = await authAPI.getMe();
+  //         if (meRes.data?.user) dispatch(updateUser(meRes.data.user));
+  //       }
+  //     } catch (err) {
+  //       Alert.alert(
+  //         "Upload failed",
+  //         err?.response?.data?.message || err.message
+  //       );
+  //     } finally {
+  //       setUploadingPhoto(false);
+  //     }
+  //   }
+  // };
+
+  // const handleDeletePhoto = () => {
+  //   Alert.alert("Delete Photo", "Remove your profile photo?", [
+  //     { text: "Cancel", style: "cancel" },
+  //     {
+  //       text: "Delete",
+  //       style: "destructive",
+  //       onPress: async () => {
+  //         setDeletingPhoto(true);
+  //         try {
+  //           const photoUrl = user.photos?.[0];
+  //           if (photoUrl) {
+  //             await authAPI.deletePhoto(photoUrl);
+  //             dispatch(updateUser({ photos: [] }));
+  //           }
+  //         } catch (err) {
+  //           Alert.alert("Error", err?.response?.data?.message || err.message);
+  //         } finally {
+  //           setDeletingPhoto(false);
+  //         }
+  //       },
+  //     },
+  //   ]);
+  // };
+
+
+  const handlePhotoSlotPress = async (index) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Permission needed", "Please allow photo access.");
@@ -842,47 +906,71 @@ export default function ProfileScreen() {
       const mimeType = ext === "png" ? "image/png" : "image/jpeg";
       const formData = new FormData();
       formData.append("photo", { uri, name: filename, type: mimeType });
-      setUploadingPhoto(true);
+      formData.append("slot", String(index)); // tell backend which slot
+      setUploadingSlot(index);
       try {
         const res = await authAPI.uploadPhoto(formData);
         if (res.data?.success) {
           dispatch(updateUser({ photos: res.data.photos }));
-          const meRes = await authAPI.getMe();
-          if (meRes.data?.user) dispatch(updateUser(meRes.data.user));
         }
+        dispatch(updateUser({ photos: res.data.photos }));
       } catch (err) {
         Alert.alert(
           "Upload failed",
           err?.response?.data?.message || err.message
         );
       } finally {
-        setUploadingPhoto(false);
+        setUploadingSlot(null);
       }
     }
   };
 
-  const handleDeletePhoto = () => {
-    Alert.alert("Delete Photo", "Remove your profile photo?", [
+  const handleDeletePhotoSlot = (index) => {
+    Alert.alert("Remove photo", "Remove this photo from your profile?", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Delete",
+        text: "Remove",
         style: "destructive",
         onPress: async () => {
-          setDeletingPhoto(true);
+          const photoUrl = user.photos?.[index];
+          if (!photoUrl) return;
+          setUploadingSlot(index);
           try {
-            const photoUrl = user.photos?.[0];
-            if (photoUrl) {
-              await authAPI.deletePhoto(photoUrl);
-              dispatch(updateUser({ photos: [] }));
-            }
+            await authAPI.deletePhoto(photoUrl);
+            const updated = [...(user.photos || [])];
+            updated.splice(index, 1);
+            dispatch(updateUser({ photos: updated }));
           } catch (err) {
             Alert.alert("Error", err?.response?.data?.message || err.message);
           } finally {
-            setDeletingPhoto(false);
+            setUploadingSlot(null);
           }
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your profile, matches, and all messages. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Forever',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await authAPI.deleteAccount();
+              disconnectSocket();
+              await dispatch(logout());
+            } catch (err) {
+              Alert.alert('Error', err.response?.data?.message || err.message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (!user) return null;
@@ -962,7 +1050,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* ── Big Photo Hero ─────────────────────────────────────────────── */}
-        <View style={{ marginHorizontal: rp(20), marginBottom: rp(20) }}>
+        {/* <View style={{ marginHorizontal: rp(20), marginBottom: rp(20) }}>
           <View
             style={{
               width: "100%",
@@ -1001,7 +1089,6 @@ export default function ProfileScreen() {
                   style={{ width: "100%", height: "100%" }}
                   resizeMode="cover"
                 />
-                {/* Action buttons overlay */}
                 <View
                   style={{
                     position: "absolute",
@@ -1080,6 +1167,184 @@ export default function ProfileScreen() {
                 </View>
               </TouchableOpacity>
             )}
+          </View>
+        </View> */}
+        {/* ── Photo Grid — 3 slots ─────────────────────────────────────────────── */}
+        {/* ── Photo Grid ─────────────────────────────────────────────── */}
+        <View style={{ marginHorizontal: rp(20), marginBottom: rp(20) }}>
+          {/* Main photo — full width */}
+          <TouchableOpacity
+            style={{
+              width: "100%",
+              height: SCREEN_W * 0.75,
+              borderRadius: rs(20),
+              overflow: "hidden",
+              backgroundColor: gc?.bg || COLORS.bgElevated,
+              borderWidth: 1.5,
+              borderColor: user.photos?.[0] ? gc?.color + "60" : COLORS.border,
+              borderStyle: user.photos?.[0] ? "solid" : "dashed",
+              marginBottom: rs(8),
+            }}
+            onPress={() => handlePhotoSlotPress(0)}
+            activeOpacity={0.8}
+          >
+            {uploadingSlot === 0 ? (
+              <View
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <ActivityIndicator color={COLORS.gold} />
+              </View>
+            ) : user.photos?.[0] ? (
+              <>
+                <Image
+                  source={{ uri: user.photos[0] }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
+                />
+                <View
+                  style={{
+                    position: "absolute",
+                    bottom: rp(10),
+                    left: rp(12),
+                    backgroundColor: "rgba(0,0,0,0.5)",
+                    borderRadius: RADIUS.sm,
+                    paddingHorizontal: rp(8),
+                    paddingVertical: rp(3),
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FONTS.body,
+                      fontSize: rf(10),
+                      color: "#fff",
+                    }}
+                  >
+                    Main photo
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={{
+                    position: "absolute",
+                    top: rp(8),
+                    right: rp(8),
+                    width: rs(28),
+                    height: rs(28),
+                    borderRadius: rs(14),
+                    backgroundColor: "rgba(220,38,38,0.8)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  onPress={() => handleDeletePhotoSlot(0)}
+                >
+                  <Text style={{ color: "#fff", fontSize: rf(13) }}>✕</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: rs(8),
+                }}
+              >
+                <Text style={{ fontSize: rf(32), opacity: 0.3 }}>+</Text>
+                <Text
+                  style={{
+                    fontFamily: FONTS.bodyMedium,
+                    fontSize: rf(14),
+                    color: gc?.color || COLORS.gold,
+                  }}
+                >
+                  Add main photo
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Secondary photos — side by side */}
+          <View style={{ flexDirection: "row", gap: rs(8) }}>
+            {[1, 2].map((index) => (
+              <TouchableOpacity
+                key={index}
+                style={{
+                  flex: 1,
+                  height: SCREEN_W * 0.38,
+                  borderRadius: rs(16),
+                  overflow: "hidden",
+                  backgroundColor: gc?.bg || COLORS.bgElevated,
+                  borderWidth: 1.5,
+                  borderColor: user.photos?.[index]
+                    ? gc?.color
+                      ? gc.color + "40"
+                      : COLORS.border
+                    : COLORS.border,
+                  borderStyle: user.photos?.[index] ? "solid" : "dashed",
+                }}
+                onPress={() => handlePhotoSlotPress(index)}
+                activeOpacity={0.8}
+              >
+                {uploadingSlot === index ? (
+                  <View
+                    style={{
+                      flex: 1,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <ActivityIndicator color={COLORS.gold} />
+                  </View>
+                ) : user.photos?.[index] ? (
+                  <>
+                    <Image
+                      source={{ uri: user.photos[index] }}
+                      style={{ width: "100%", height: "100%" }}
+                      resizeMode="cover"
+                    />
+                    <TouchableOpacity
+                      style={{
+                        position: "absolute",
+                        top: rp(6),
+                        right: rp(6),
+                        width: rs(26),
+                        height: rs(26),
+                        borderRadius: rs(13),
+                        backgroundColor: "rgba(220,38,38,0.8)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      onPress={() => handleDeletePhotoSlot(index)}
+                    >
+                      <Text style={{ color: "#fff", fontSize: rf(12) }}>✕</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <View
+                    style={{
+                      flex: 1,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: rs(4),
+                    }}
+                  >
+                    <Text style={{ fontSize: rf(24), opacity: 0.3 }}>+</Text>
+                    <Text
+                      style={{
+                        fontFamily: FONTS.body,
+                        fontSize: rf(11),
+                        color: COLORS.textDim,
+                      }}
+                    >
+                      Add
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
@@ -1840,11 +2105,7 @@ export default function ProfileScreen() {
               justifyContent: "space-between",
               paddingVertical: rp(10),
             }}
-            onPress={() =>
-              Alert.alert(
-                "Delete Account",
-                "Not yet available. Contact support."
-              )
+            onPress={() => handleDeleteAccount()
             }
           >
             <View style={{ flex: 1 }}>
