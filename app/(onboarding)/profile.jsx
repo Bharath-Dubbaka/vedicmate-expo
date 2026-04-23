@@ -47,6 +47,14 @@ export default function ProfileOnboardingScreen() {
       Alert.alert("Required", "Please select your gender.");
       return;
     }
+    if (parseInt(minAge) < 18 || parseInt(maxAge) < 18) {
+      Alert.alert("Invalid Age", "Age must be 18 or above.");
+      return;
+    }
+    if (parseInt(minAge) >= parseInt(maxAge)) {
+      Alert.alert("Invalid Range", "Min age must be less than max age.");
+      return;
+    }
     setLoading(true);
     try {
       await onboardingAPI.saveProfile({
@@ -329,6 +337,31 @@ export default function ProfileOnboardingScreen() {
             </View>
           ))}
         </View>
+        {/* Validation errors */}
+        {(parseInt(minAge) < 18 || parseInt(maxAge) < 18) && (
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: 12,
+              color: COLORS.rose,
+              marginTop: 6,
+            }}
+          >
+            ⚠️ Age must be 18 or above
+          </Text>
+        )}
+        {parseInt(minAge) >= parseInt(maxAge) && parseInt(minAge) >= 18 && (
+          <Text
+            style={{
+              fontFamily: FONTS.body,
+              fontSize: 12,
+              color: COLORS.rose,
+              marginTop: 6,
+            }}
+          >
+            ⚠️ Min age must be less than max age
+          </Text>
+        )}
 
         {/* Min Guna */}
         <Text
@@ -414,10 +447,21 @@ export default function ProfileOnboardingScreen() {
             paddingVertical: SPACING.md + 2,
             alignItems: "center",
             elevation: 8,
-            opacity: loading ? 0.6 : 1,
+            opacity:
+              loading ||
+              parseInt(minAge) < 18 ||
+              parseInt(maxAge) < 18 ||
+              parseInt(minAge) >= parseInt(maxAge)
+                ? 0.4
+                : 1,
           }}
           onPress={handleSubmit}
-          disabled={loading}
+          disabled={
+            loading ||
+            parseInt(minAge) < 18 ||
+            parseInt(maxAge) < 18 ||
+            parseInt(minAge) >= parseInt(maxAge)
+          }
         >
           {loading ? (
             <ActivityIndicator color={COLORS.bg} />

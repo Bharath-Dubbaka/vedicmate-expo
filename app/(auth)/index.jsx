@@ -312,7 +312,7 @@ export default function AuthScreen() {
           </Animated.View>
 
           {/* Form card for manual login , wasy testing using expo n preview*/}
-          <Animated.View
+          {/* <Animated.View
             style={{
               width: "100%",
               backgroundColor: COLORS.bgCard,
@@ -646,10 +646,10 @@ export default function AuthScreen() {
                 )
               )}
             </View>
-          </Animated.View>
+          </Animated.View> */}
 
           {/* Form card for production only google oauth*/}
-          {/* <Animated.View
+          <Animated.View
             style={{
               width: "100%",
               backgroundColor: COLORS.bgCard,
@@ -756,7 +756,7 @@ export default function AuthScreen() {
                 )
               )}
             </View>
-          </Animated.View> */}
+          </Animated.View>
         </ScrollView>
 
         <Text

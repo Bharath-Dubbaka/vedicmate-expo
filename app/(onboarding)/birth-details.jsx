@@ -42,6 +42,7 @@ export default function BirthDetailsScreen() {
   const [geocodeResult, setGeocodeResult] = useState(null);
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
+  const [searchAttempted, setSearchAttempted] = useState(false);
 
   useEffect(() => {
     if (user?.name) setDisplayName(user.name);
@@ -50,6 +51,7 @@ export default function BirthDetailsScreen() {
   const geocodePlace = async (placeName) => {
     if (!placeName.trim() || placeName.trim().length < 3) return;
     setGeocoding(true);
+    setSearchAttempted(true);
     setGeocodeResult(null);
     try {
       const encoded = encodeURIComponent(placeName.trim());
@@ -457,6 +459,7 @@ export default function BirthDetailsScreen() {
                     setGeocodeResult(null);
                     setLat("");
                     setLng("");
+                    setSearchAttempted(false);
                   }}
                   onEndEditing={() => geocodePlace(place)}
                   autoCapitalize="words"
@@ -540,7 +543,7 @@ export default function BirthDetailsScreen() {
                   </View>
                 </View>
               )}
-              {!geocoding && !geocodeResult && place.length > 3 && !lat && (
+              {!geocoding && !geocodeResult && searchAttempted && !lat && (
                 <Text
                   style={{
                     fontFamily: FONTS.body,

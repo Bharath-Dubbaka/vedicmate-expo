@@ -38,7 +38,15 @@ import {
   clearBadgeCount,
 } from "../services/notifications";
 import { fetchPremiumStatus, resetPremium } from "../store/slices/premiumSlice";
+import Constants from "expo-constants";
+
 import Purchases from "react-native-purchases";
+// let Purchases = null;
+// try {
+//   Purchases = require("react-native-purchases").default;
+// } catch (e) {
+//   console.log("[RC] not available:", e.message);
+// }
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 
 SplashScreen.preventAutoHideAsync();
@@ -112,6 +120,7 @@ function PushNotificationHandler() {
 
 // Initializes RevenueCat and fetches premium status only after login.
 // Separated into its own component so it re-renders when token changes.
+//PRODUCTION
 function PremiumInit() {
   const dispatch = useDispatch();
   const token = useSelector(selectToken);
@@ -152,6 +161,50 @@ function PremiumInit() {
 
   return null;
 }
+
+//EXPO DEV
+// function PremiumInit() {
+//   const dispatch = useDispatch();
+//   const token = useSelector(selectToken);
+//   const user = useSelector(selectUser);
+//   const prevTokenRef = useRef(null);
+
+//   useEffect(() => {
+//     if (Constants.appOwnership === "expo") {
+//       console.log("[RC] Expo Go — skipping RC configure");
+//       return;
+//     }
+//     if (process.env.EXPO_PUBLIC_REVENUECAT_KEY) {
+//       Purchases.configure({ apiKey: process.env.EXPO_PUBLIC_REVENUECAT_KEY });
+//     }
+//   }, []);
+
+//   useEffect(() => {
+//     const wasLoggedIn = !!prevTokenRef.current;
+//     const isNowLoggedIn = !!token;
+//     prevTokenRef.current = token;
+
+//     if (isNowLoggedIn && !wasLoggedIn) {
+//       if (Purchases && user?.id) {
+//         // ← guard
+//         Purchases.logIn(user.id)
+//           .then(() => console.log("[RC] Logged in user:", user.id))
+//           .catch((err) => console.warn("[RC] Login error:", err.message));
+//       }
+//       dispatch(fetchPremiumStatus());
+//     } else if (!isNowLoggedIn && wasLoggedIn) {
+//       if (Purchases) {
+//         // ← guard
+//         Purchases.logOut()
+//           .then(() => console.log("[RC] Logged out"))
+//           .catch(() => {});
+//       }
+//       dispatch(resetPremium());
+//     }
+//   }, [token, user?.id]);
+
+//   return null;
+// }
 
 // Inner app — has access to theme
 function InnerApp() {
