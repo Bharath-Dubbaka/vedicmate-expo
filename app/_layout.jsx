@@ -104,10 +104,10 @@ function PushNotificationHandler() {
           { text: "Dismiss", style: "cancel" },
           { text: "View", onPress: () => handleNotificationData(data) },
         ]);
-      }
+      },
     );
     const unsubResponse = subscribeToNotificationResponse(
-      handleNotificationData
+      handleNotificationData,
     );
     return () => {
       unsubForeground();
@@ -126,6 +126,16 @@ function PremiumInit() {
   const token = useSelector(selectToken);
   const user = useSelector(selectUser);
   const prevTokenRef = useRef(null);
+  console.log("[RC] logging in user:", user?.id);
+
+  // separate effect just for RC login
+  useEffect(() => {
+    if (user?.id) {
+      Purchases.logIn(user.id.toString())
+        .then(() => console.log("[RC] Logged in user:", user.id))
+        .catch((err) => console.warn("[RC] Login error:", err.message));
+    }
+  }, [user?.id]);
 
   // Configure RC once on mount
   useEffect(() => {
@@ -143,12 +153,6 @@ function PremiumInit() {
     prevTokenRef.current = token;
 
     if (isNowLoggedIn && !wasLoggedIn) {
-      // User just logged in — identify them in RC
-      if (user?.id) {
-        Purchases.logIn(user.id)
-          .then(() => console.log("[RC] Logged in user:", user.id))
-          .catch((err) => console.warn("[RC] Login error:", err.message));
-      }
       dispatch(fetchPremiumStatus());
     } else if (!isNowLoggedIn && wasLoggedIn) {
       // User logged out — reset RC

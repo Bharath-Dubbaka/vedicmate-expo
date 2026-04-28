@@ -68,20 +68,31 @@ export const usePremium = () => {
     async (planKey = "annual") => {
       try {
         const offerings = await Purchases.getOfferings();
+        console.log("[RC] offerings current:", offerings.current);
+        console.log(
+          "[RC] availablePackages:",
+          offerings.current?.availablePackages,
+        );
         const offering = offerings.current;
         if (!offering) {
           Alert.alert("Error", "No offerings available. Please try again.");
           return { success: false };
         }
         const packageToPurchase =
-          planKey === "monthly" ? offering.monthly : offering.annual;
+          planKey === "monthly"
+            ? offering.availablePackages.find(
+                (p) => p.packageType === "MONTHLY",
+              )
+            : offering.availablePackages.find(
+                (p) => p.packageType === "ANNUAL",
+              );
+        console.log("[RC] packageToPurchase:", packageToPurchase);
         if (!packageToPurchase) {
           Alert.alert("Error", "Package not found.");
           return { success: false };
         }
-        const { customerInfo } = await Purchases.purchasePackage(
-          packageToPurchase
-        );
+        const { customerInfo } =
+          await Purchases.purchasePackage(packageToPurchase);
         if (customerInfo.entitlements.active["premium"]) {
           const api = (await import("../../services/api")).default;
           await api.post("/premium/verify", {
@@ -100,7 +111,7 @@ export const usePremium = () => {
         return { success: false };
       }
     },
-    [dispatch]
+    [dispatch],
   );
 
   // Restore purchases
