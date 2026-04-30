@@ -31,6 +31,7 @@ import {
   selectAuthLoading,
   selectAuthError,
 } from "../../store/slices/authSlice";
+import * as Sentry from "@sentry/react-native";
 
 // Safely try to import Google Sign-In — only works in a native dev build.
 // In Expo Go this import crashes the app, so we guard it.
@@ -81,7 +82,7 @@ export default function AuthScreen() {
     if (!googleSignInAvailable || !GoogleSignin) {
       Alert.alert(
         "Not Available in Expo Go",
-        "Google Sign-In requires a development build."
+        "Google Sign-In requires a development build.",
       );
       return;
     }
@@ -104,6 +105,10 @@ export default function AuthScreen() {
         dispatch(setAuth({ token, user }));
       }
     } catch (error) {
+      Sentry.captureException(error, {
+        tags: { flow: "google_signin" },
+        extra: { errorCode: error.code, errorMessage: error.message },
+      });
       if (error.code !== statusCodes?.SIGN_IN_CANCELLED) {
         Alert.alert("Sign-In Failed", error.message || "Please try again.");
       }
@@ -143,7 +148,7 @@ export default function AuthScreen() {
           duration: 2500,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     ).start();
     Animated.timing(formAnim, {
       toValue: 1,
@@ -179,7 +184,7 @@ export default function AuthScreen() {
         return;
       }
       await dispatch(
-        register({ name: name.trim(), email: email.trim(), password })
+        register({ name: name.trim(), email: email.trim(), password }),
       );
     } else {
       await dispatch(login({ email: email.trim(), password }));
@@ -753,7 +758,7 @@ export default function AuthScreen() {
                       {pill}
                     </Text>
                   </View>
-                )
+                ),
               )}
             </View>
           </Animated.View>

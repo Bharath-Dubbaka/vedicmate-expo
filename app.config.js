@@ -43,6 +43,14 @@ module.exports = {
       "@react-native-community/datetimepicker",
       "expo-web-browser",
       "@react-native-google-signin/google-signin", // ← no options needed for Android
+      [
+        "@sentry/react-native/expo",
+        {
+          url: "https://sentry.io/",
+          project: "react-native",
+          organization: "vedicfind",
+        },
+      ],
     ],
     extra: {
       router: { root: "./app" },

@@ -48,6 +48,29 @@ import Purchases from "react-native-purchases";
 //   console.log("[RC] not available:", e.message);
 // }
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
+import * as Sentry from "@sentry/react-native";
+
+Sentry.init({
+  dsn: "https://c9539b5c6ceb33f566bd0011e2a3a07d@o4511310075527168.ingest.de.sentry.io/4511310078541904",
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // Enable Logs
+  enableLogs: true,
+
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [
+    Sentry.mobileReplayIntegration(),
+    Sentry.feedbackIntegration(),
+  ],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
 
 SplashScreen.preventAutoHideAsync();
 
@@ -126,7 +149,7 @@ function PremiumInit() {
   const token = useSelector(selectToken);
   const user = useSelector(selectUser);
   const prevTokenRef = useRef(null);
-  console.log("[RC] logging in user:", user?.id);
+  // console.log("[RC] logging in user:", user?.id);
 
   // separate effect just for RC login
   useEffect(() => {
@@ -134,6 +157,11 @@ function PremiumInit() {
       Purchases.logIn(user.id.toString())
         .then(() => console.log("[RC] Logged in user:", user.id))
         .catch((err) => console.warn("[RC] Login error:", err.message));
+    }
+    if (user?.id) {
+      Sentry.setUser({ id: user.id.toString(), email: user.email });
+    } else {
+      Sentry.setUser(null);
     }
   }, [user?.id]);
 
@@ -272,7 +300,7 @@ function InnerApp() {
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
-export default function RootLayout() {
+export default Sentry.wrap(function RootLayout() {
   return (
     <Provider store={store}>
       <ThemeProvider>
@@ -280,4 +308,4 @@ export default function RootLayout() {
       </ThemeProvider>
     </Provider>
   );
-}
+});
