@@ -19,7 +19,9 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://10.0.2.2:5000/api";
+const BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  "https://vedicmate-node-production.up.railway.app/api";
 console.log("[API] Base URL:", BASE_URL);
 
 const api = axios.create({
@@ -38,7 +40,7 @@ api.interceptors.request.use(
   (error) => {
     console.error("[API REQUEST ERROR]", error.message);
     return Promise.reject(error);
-  }
+  },
 );
 
 api.interceptors.response.use(
@@ -52,14 +54,16 @@ api.interceptors.response.use(
     console.error(
       `[API ERROR] ${status} ${url} — ${
         err.response?.data?.message || err.message
-      }`
+      }`,
     );
+
+    Sentry.setTag("api_base_url", BASE_URL);
     if (status === 401) {
       console.log("[API] 401 received — clearing auth tokens");
       await AsyncStorage.multiRemove(["token", "user"]);
     }
     return Promise.reject(err);
-  }
+  },
 );
 
 // ── Auth ──────────────────────────────────────────────────────────────────────

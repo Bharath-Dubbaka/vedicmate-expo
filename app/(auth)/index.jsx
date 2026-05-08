@@ -88,7 +88,7 @@ export default function AuthScreen() {
     }
     setGoogleLoading(true);
     try {
-      await GoogleSignin.signOut();
+      // await GoogleSignin.signOut();
       await GoogleSignin.hasPlayServices();
       const response = await GoogleSignin.signIn();
       if (isSuccessResponse(response)) {
